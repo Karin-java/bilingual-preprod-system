@@ -4,11 +4,12 @@
   "title": "Appearance records and deterministic report views",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "appearance_version", "registry_input", "analysis_inputs", "major_selection", "appearances", "unregistered_observation_ids", "chapter_rows", "major_character_scenes"],
+  "required": ["schema_version", "appearance_version", "registry_input", "profile_input", "analysis_inputs", "major_selection", "appearances", "unregistered_observation_ids", "chapter_rows", "major_character_scenes"],
   "properties": {
     "schema_version": {"const": "2.0.0"},
     "appearance_version": {"const": "appearance-registry-v1"},
     "registry_input": {"$ref": "#/$defs/input"},
+    "profile_input": {"$ref": "#/$defs/input"},
     "analysis_inputs": {
       "type": "array",
       "minItems": 1,

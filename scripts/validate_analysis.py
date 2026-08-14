@@ -17,6 +17,7 @@ TEXT_TYPES = {
     "inner_thought", "voice_over", "letter", "on_screen_text", "transition", "other",
 }
 BEAT_TYPES = {"opening", "goal", "conflict", "revelation", "emotion", "power_shift", "character_entry", "action", "other"}
+PROFILE_FIELDS = {"age", "gender", "race", "identity", "appearance", "hair", "body_type", "special_marks", "clothing", "personality", "story_role", "basic_info_summary"}
 STATUSES = {"explicit", "inferred", "user_confirmed", "conflict", "unknown"}
 GENERIC_LOCATIONS = {"某处", "未知地点", "日常卧室", "室内场景", "室外场景", "普通场景"}
 CJK_RE = re.compile(r"[\u3400-\u9fff]")
@@ -373,6 +374,48 @@ def validate_analysis(project_dir: Path, chapter_id: str) -> list[str]:
         if duplicates:
             errors.append("identified speaker segments belong to multiple character observations: " + ", ".join(duplicates))
 
+    profile_observations = analysis.get("profile_observations")
+    if not isinstance(profile_observations, list):
+        errors.append("profile_observations must be an array")
+        profile_observations = []
+    profile_observation_ids: set[str] = set()
+    profile_keys: set[tuple[str, str, str]] = set()
+    for index, observation in enumerate(profile_observations, 1):
+        context = f"profile observation {index}"
+        if not isinstance(observation, dict):
+            errors.append(f"{context}: record is not an object")
+            continue
+        expected_id = f"POBS-{chapter_id}-{index:04d}"
+        if observation.get("profile_observation_id") != expected_id:
+            errors.append(f"{context}: must use stable ID {expected_id}")
+        else:
+            profile_observation_ids.add(expected_id)
+        entity_key = observation.get("entity_key")
+        if not isinstance(entity_key, str) or not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", entity_key):
+            errors.append(f"{context}: entity_key is invalid")
+        matched = observation.get("matched_character_id")
+        if matched is not None and (not isinstance(matched, str) or not re.fullmatch(r"CHAR-[0-9]{4}", matched)):
+            errors.append(f"{context}: matched_character_id is invalid")
+        field = observation.get("field")
+        if field not in PROFILE_FIELDS:
+            errors.append(f"{context}: field is invalid")
+        for name in ("value_zh", "normalized_value"):
+            if not isinstance(observation.get(name), str) or not observation[name].strip():
+                errors.append(f"{context}: {name} is required")
+        if observation.get("status") not in {"explicit", "inferred", "user_confirmed"}:
+            errors.append(f"{context}: status must describe an actual observed fact")
+        check_confidence(observation.get("confidence"), context, errors)
+        check_evidence(observation.get("evidence"), source_texts, context, errors)
+        profile_units = observation.get("source_unit_ids")
+        if not isinstance(profile_units, list) or not profile_units or len(profile_units) != len(set(profile_units)) or any(unit_id not in source_texts for unit_id in profile_units):
+            errors.append(f"{context}: source_unit_ids are invalid")
+        if not isinstance(observation.get("note_zh"), str):
+            errors.append(f"{context}: note_zh must be a string")
+        key = (str(entity_key), str(field), str(observation.get("normalized_value")))
+        if key in profile_keys:
+            errors.append(f"{context}: duplicate same-chapter profile fact")
+        profile_keys.add(key)
+
     review = analysis.get("review")
     if not isinstance(review, dict):
         errors.append("review is not an object")
@@ -404,6 +447,7 @@ def validate_analysis(project_dir: Path, chapter_id: str) -> list[str]:
                 or (scope_type == "source_unit" and scope_id in source_texts)
                 or (scope_type == "segment" and scope_id in segment_ids)
                 or (scope_type == "character_observation" and scope_id in observation_ids)
+                or (scope_type == "profile_observation" and scope_id in profile_observation_ids)
             )
             if not valid_scope:
                 errors.append(f"review issue {issue_index} has invalid scope {scope_type}:{scope_id}")

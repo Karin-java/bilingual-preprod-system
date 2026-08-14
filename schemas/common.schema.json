@@ -11,6 +11,8 @@
     "reviewIssueId": {"type": "string", "pattern": "^ISS-P[0-9]{2,}-[0-9]{4}$"},
     "reviewEventId": {"type": "string", "pattern": "^REV-P[0-9]{2,}-[0-9]{6}$"},
     "characterObservationId": {"type": "string", "pattern": "^COBS-P[0-9]{2,}-[0-9]{4}$"},
+    "profileObservationId": {"type": "string", "pattern": "^POBS-P[0-9]{2,}-[0-9]{4}$"},
+    "profileDecisionEventId": {"type": "string", "pattern": "^PROFILE-[0-9]{6}$"},
     "characterId": {"type": "string", "pattern": "^CHAR-[0-9]{4}$"},
     "characterIdentityEventId": {"type": "string", "pattern": "^IDENT-[0-9]{6}$"},
     "characterIdentityCandidateId": {"type": "string", "pattern": "^IDN-[0-9]{4}$"},

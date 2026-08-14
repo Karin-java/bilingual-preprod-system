@@ -21,6 +21,7 @@ BEAT_RE = re.compile(r"^P[0-9]{2,}-S[0-9]{3}-B[0-9]{3}$")
 UNIT_RE = re.compile(r"^P[0-9]{2,}-U[0-9]{4}$")
 SEGMENT_RE = re.compile(r"^P[0-9]{2,}-U[0-9]{4}-G[0-9]{3}$")
 OBSERVATION_RE = re.compile(r"^COBS-P[0-9]{2,}-[0-9]{4}$")
+PROFILE_OBSERVATION_RE = re.compile(r"^POBS-P[0-9]{2,}-[0-9]{4}$")
 
 SCENE_FIELDS = {
     "summary_zh",
@@ -45,7 +46,8 @@ OBSERVATION_FIELDS = {
     "entity_key", "matched_character_id", "canonical_label", "chinese_label", "aliases",
     "chinese_aliases", "summary_zh", "character_type", "importance_hint", "presence_type",
 }
-ALLOWED_FIELDS = {"scene": SCENE_FIELDS, "beat": BEAT_FIELDS, "segment": SEGMENT_FIELDS, "character_observation": OBSERVATION_FIELDS}
+PROFILE_OBSERVATION_FIELDS = {"entity_key", "matched_character_id", "field", "value_zh", "normalized_value", "note_zh"}
+ALLOWED_FIELDS = {"scene": SCENE_FIELDS, "beat": BEAT_FIELDS, "segment": SEGMENT_FIELDS, "character_observation": OBSERVATION_FIELDS, "profile_observation": PROFILE_OBSERVATION_FIELDS}
 
 
 def json_bytes(value: object) -> bytes:
@@ -75,6 +77,8 @@ def paths(project_dir: Path, chapter_id: str) -> tuple[Path, Path, Path, Path]:
 
 
 def scope_type(scope_id: str) -> str:
+    if PROFILE_OBSERVATION_RE.fullmatch(scope_id):
+        return "profile_observation"
     if OBSERVATION_RE.fullmatch(scope_id):
         return "character_observation"
     if BEAT_RE.fullmatch(scope_id):
@@ -91,7 +95,7 @@ def scope_type(scope_id: str) -> str:
 
 
 def chapter_from_scope(scope_id: str) -> str:
-    if OBSERVATION_RE.fullmatch(scope_id):
+    if OBSERVATION_RE.fullmatch(scope_id) or PROFILE_OBSERVATION_RE.fullmatch(scope_id):
         return scope_id.split("-")[1]
     return scope_id.split("-", 1)[0]
 
@@ -117,6 +121,8 @@ def objects_by_scope(analysis: dict[str, Any]) -> dict[tuple[str, str], dict[str
             result[("beat", beat["beat_id"])] = beat
     for observation in analysis["character_observations"]:
         result[("character_observation", observation["observation_id"])] = observation
+    for observation in analysis.get("profile_observations", []):
+        result[("profile_observation", observation["profile_observation_id"])] = observation
     return result
 
 
@@ -133,7 +139,7 @@ def read_events(events_path: Path) -> tuple[list[dict[str, Any]], bytes]:
 
 
 def validate_value(kind: str, field_path: str, value: Any) -> None:
-    if field_path in {"summary_zh", "location.standardized_name", "location.parent_location", "location.sub_location", "translation.text_zh", "speaker.canonical_label", "speaker.chinese_label", "canonical_label", "chinese_label"}:
+    if field_path in {"summary_zh", "location.standardized_name", "location.parent_location", "location.sub_location", "translation.text_zh", "speaker.canonical_label", "speaker.chinese_label", "canonical_label", "chinese_label", "value_zh", "normalized_value", "note_zh"}:
         if value is not None and (not isinstance(value, str) or not value.strip()):
             raise ValueError(f"{field_path} must be a non-empty string or null")
     elif field_path == "location.location_id":
@@ -169,6 +175,8 @@ def validate_value(kind: str, field_path: str, value: Any) -> None:
         raise ValueError("importance_hint is invalid")
     elif field_path == "presence_type" and value not in {"physical", "dream", "flashback", "mentioned", "unknown"}:
         raise ValueError("presence_type is invalid")
+    elif field_path == "field" and value not in {"age", "gender", "race", "identity", "appearance", "hair", "body_type", "special_marks", "clothing", "personality", "story_role", "basic_info_summary"}:
+        raise ValueError("profile field is invalid")
 
 
 def validate_events(events: list[dict[str, Any]], chapter_id: str, base_hash: str, analysis: dict[str, Any]) -> None:
@@ -290,6 +298,8 @@ def mark_user_confirmed(target: dict[str, Any], kind: str, field_path: str) -> N
     elif kind == "segment" and field_path.startswith("speaker."):
         container = target.get("speaker")
     elif kind == "character_observation":
+        container = target
+    elif kind == "profile_observation":
         container = target
     if isinstance(container, dict) and "status" in container:
         container["status"] = "user_confirmed"

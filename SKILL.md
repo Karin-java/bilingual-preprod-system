@@ -65,6 +65,8 @@ python scripts/render_chapter.py <project> --chapter P01
 python scripts/validate_render.py <project> --chapter P01
 python scripts/build_registries.py <project>
 python scripts/validate_registries.py <project>
+python scripts/build_profiles.py <project>
+python scripts/validate_profiles.py <project>
 python scripts/build_appearance_reports.py <project>
 python scripts/validate_appearance_reports.py <project>
 ```
@@ -74,6 +76,13 @@ python scripts/validate_appearance_reports.py <project>
 ```text
 python scripts/manage_character_identities.py merge <project> --source CHAR-0008 --target CHAR-0002 --canonical-name Viktor --chinese-name 维克托 --note <evidence-or-user-confirmation>
 python scripts/manage_character_identities.py retract <project> --event IDENT-000001 --note <reason>
+```
+
+后文章节或全书复盘确认人物参数时，追加全局资料决定；旧章节事实和证据保持不变：
+
+```text
+python scripts/manage_profile_decisions.py set <project> --character Viktor --field story_role --value 男主 --note <依据或用户确认>
+python scripts/manage_profile_decisions.py retract <project> --event PROFILE-000001 --note <reason>
 ```
 
 结构与证据通过即可继续；`provisional` 表示仍有待确认项，不是校验失败。人工验收时读取 `references/review_workflow.md`，追加精准修订并物化当前视图：
@@ -107,5 +116,8 @@ python scripts/review_analysis.py retract <project> --chapter P01 --event REV-P0
 - `references/appearance_rules.md`：全角色章节对应矩阵、每个主要角色独立出镜表、实际出镜、梦境/回忆、仅被提及和统一身份去重规则。
 - `scripts/build_appearance_reports.py`：生成机器出镜事实、角色为行且 P章节为列的出镜矩阵，以及主要角色场景统计 Markdown。
 - `scripts/validate_appearance_reports.py`：校验稳定出镜 ID、统一角色去重、场景摘要和两份 Markdown 的可重建性。
+- `scripts/build_profiles.py`：按统一角色永久编号聚合逐章资料事实，生成角色档案和只含未决项的全书复盘清单。
+- `scripts/manage_profile_decisions.py`：追加或撤销全局人物资料确认，不回写已经完成的章节。
+- `scripts/validate_profiles.py`：校验必需人物参数、证据、跨章归并、未知项和 Markdown 可重建性。
 
 每完成一个流水线阶段即运行对应校验。失败时只返修受影响的章节、场景或记录，不重跑已通过的全量数据。

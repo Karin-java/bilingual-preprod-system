@@ -13,13 +13,16 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from ingest_source import ingest_source  # noqa: E402
 from build_appearance_reports import build_appearance_reports, render_chapter_table  # noqa: E402
+from build_profiles import build_profiles  # noqa: E402
 from build_registries import build_registries, resolve_character_reference  # noqa: E402
 from manage_character_identities import append_identity_event  # noqa: E402
+from manage_profile_decisions import append_event as append_profile_event  # noqa: E402
 from prepare_analysis import prepare_packet  # noqa: E402
 from render_chapter import render_chapter  # noqa: E402
 from review_analysis import append_event, materialize  # noqa: E402
 from validate_analysis import validate_analysis  # noqa: E402
 from validate_appearance_reports import validate_appearance_reports  # noqa: E402
+from validate_profiles import validate_profiles  # noqa: E402
 from validate_render import validate_render  # noqa: E402
 from validate_registries import validate_registries  # noqa: E402
 
@@ -175,6 +178,7 @@ class AnalysisTests(unittest.TestCase):
                     "evidence": evidence(u4, "The king"),
                 },
             ],
+            "profile_observations": [],
             "review": {"status": "ready", "issues": []},
         }
 
@@ -594,7 +598,7 @@ class AnalysisTests(unittest.TestCase):
         self.assertIn("| Violette / 薇奥莱特 | 现实：场1；台词：场1 |", chapter)
         self.assertNotIn("| 角色 | 章节 |", chapter)
         self.assertIn("## 国王 / King", major)
-        self.assertIn("**基本信息**：主要角色候选；详细身份待完整剧本复盘补充", major)
+        self.assertIn("**基本信息**：主要角色候选", major)
         self.assertIn("| 出场章节 | 出场场景（原文位置） | 时间 | 备注 |", major)
         self.assertIn("| P01 | 国王的书房 | 夜·内 |", major)
         self.assertIn("国王在书房接受薇奥莱特的行礼。", major)
@@ -637,6 +641,118 @@ class AnalysisTests(unittest.TestCase):
         _, chapter_path, _, _ = build_appearance_reports(self.project)
         chapter_path.write_text("tampered\n", encoding="utf-8")
         self.assertTrue(any("chapter Markdown" in error for error in validate_appearance_reports(self.project)))
+
+    def test_profiles_accumulate_sparse_complementary_facts_without_fabrication(self) -> None:
+        changed = copy.deepcopy(self.analysis)
+        changed["profile_observations"] = [
+            {
+                "profile_observation_id": "POBS-P01-0001", "entity_key": "violette", "matched_character_id": None,
+                "field": "identity", "value_zh": "国王的奴隶", "normalized_value": "slave-of-king",
+                "status": "explicit", "confidence": 1, "source_unit_ids": ["P01-U0003"],
+                "evidence": evidence("P01-U0003", "Your slave is here"), "note_zh": "台词明确自称奴隶。",
+            },
+            {
+                "profile_observation_id": "POBS-P01-0002", "entity_key": "violette", "matched_character_id": None,
+                "field": "identity", "value_zh": "薇奥莱特", "normalized_value": "named-violette",
+                "status": "explicit", "confidence": 1, "source_unit_ids": ["P01-U0002"],
+                "evidence": evidence("P01-U0002", "Violette"), "note_zh": "姓名信息与身份线索可以并存。",
+            },
+        ]
+        self.write_analysis(changed)
+        build_registries(self.project)
+        _, profile_path, _, bundle = build_profiles(self.project)
+        violette = next(item for item in bundle["profiles"] if item["character_id"] == "CHAR-0001")
+        self.assertEqual(violette["fields"]["identity"]["status"], "explicit")
+        self.assertEqual(violette["fields"]["identity"]["value_zh"], "国王的奴隶；薇奥莱特")
+        self.assertEqual(violette["fields"]["age"], {"value_zh": None, "status": "unknown", "fact_ids": [], "facts": []})
+        markdown = profile_path.read_text(encoding="utf-8")
+        self.assertIn("| 年龄 | 待确认 | 待确认 | — |", markdown)
+        self.assertEqual(validate_profiles(self.project), [])
+
+    def test_profile_decision_updates_downstream_without_rewriting_chapter(self) -> None:
+        build_registries(self.project)
+        build_profiles(self.project)
+        base_path = self.project / self.packet["output_path"]
+        base_before = base_path.read_bytes()
+        event = append_profile_event(self.project, {
+            "operation": "set_field", "character_ref": "Violette", "field": "story_role",
+            "value_zh": "女主", "normalized_value": "female-lead", "note": "用户确认剧情定位", "actor": "验收用户",
+        })
+        self.assertEqual(event["character_ref"], "CHAR-0001")
+        _, profile_path, _, bundle = build_profiles(self.project)
+        violette = next(item for item in bundle["profiles"] if item["character_id"] == "CHAR-0001")
+        self.assertEqual(violette["fields"]["story_role"]["status"], "user_confirmed")
+        self.assertEqual(violette["basic_info_summary_zh"], "女主")
+        self.assertEqual(base_path.read_bytes(), base_before)
+        _, _, major_path, appearance_bundle = build_appearance_reports(self.project)
+        self.assertIn("**基本信息**：女主", major_path.read_text(encoding="utf-8"))
+        self.assertIn("profile_input", appearance_bundle)
+        self.assertEqual(validate_profiles(self.project), [])
+        packet_path, _ = prepare_packet(self.project, "P01", replace=True)
+        context = json.loads(packet_path.read_text(encoding="utf-8"))["registry_context"]
+        violette_context = next(item for item in context["characters"] if item["character_id"] == "CHAR-0001")
+        self.assertEqual(violette_context["profile_fields"]["story_role"], {"value_zh": "女主", "status": "user_confirmed"})
+
+    def test_single_value_profile_conflict_enters_bilingual_recap(self) -> None:
+        changed = copy.deepcopy(self.analysis)
+        changed["profile_observations"] = [
+            {
+                "profile_observation_id": "POBS-P01-0001", "entity_key": "violette", "matched_character_id": None,
+                "field": "gender", "value_zh": "女性", "normalized_value": "female", "status": "inferred", "confidence": 0.7,
+                "source_unit_ids": ["P01-U0002"], "evidence": evidence("P01-U0002", "Violette"), "note_zh": "测试推断一。",
+            },
+            {
+                "profile_observation_id": "POBS-P01-0002", "entity_key": "violette", "matched_character_id": None,
+                "field": "gender", "value_zh": "男性", "normalized_value": "male", "status": "inferred", "confidence": 0.6,
+                "source_unit_ids": ["P01-U0003"], "evidence": evidence("P01-U0003", "my King"), "note_zh": "测试推断二。",
+            },
+        ]
+        self.write_analysis(changed)
+        build_registries(self.project)
+        _, _, recap_path, bundle = build_profiles(self.project)
+        violette = next(item for item in bundle["profiles"] if item["character_id"] == "CHAR-0001")
+        self.assertEqual(violette["fields"]["gender"]["status"], "conflict")
+        recap = recap_path.read_text(encoding="utf-8")
+        self.assertIn("英文：Violette", recap)
+        self.assertIn("中文：中文译文：At night, Violette entered the king's study.", recap)
+        self.assertEqual(validate_profiles(self.project), [])
+
+    def test_profile_decision_can_be_retracted_without_rewriting_chapter(self) -> None:
+        build_registries(self.project)
+        base_path = self.project / self.packet["output_path"]
+        base_before = base_path.read_bytes()
+        decision = append_profile_event(self.project, {
+            "operation": "set_field", "character_ref": "Violette", "field": "story_role",
+            "value_zh": "女主", "normalized_value": "female-lead", "note": "临时确认", "actor": "验收用户",
+        })
+        append_profile_event(self.project, {
+            "operation": "retract_event", "target_event_id": decision["event_id"],
+            "note": "撤销临时确认", "actor": "验收用户",
+        })
+        _, _, _, bundle = build_profiles(self.project)
+        violette = next(item for item in bundle["profiles"] if item["character_id"] == "CHAR-0001")
+        self.assertEqual(violette["fields"]["story_role"]["status"], "unknown")
+        self.assertEqual(bundle["decision_log"]["active_event_ids"], [])
+        self.assertEqual(bundle["decision_log"]["retracted_event_ids"], [decision["event_id"]])
+        self.assertEqual(base_path.read_bytes(), base_before)
+
+    def test_profile_decision_follows_character_redirect_after_identity_merge(self) -> None:
+        self.add_king_viktor_observation()
+        build_registries(self.project)
+        decision = append_profile_event(self.project, {
+            "operation": "set_field", "character_ref": "King Viktor", "field": "story_role",
+            "value_zh": "男主", "normalized_value": "male-lead", "note": "用户确认剧情定位", "actor": "验收用户",
+        })
+        self.assertEqual(decision["character_ref"], "CHAR-0003")
+        append_identity_event(self.project, {
+            "operation": "merge_characters", "source_character_id": "CHAR-0003", "target_character_id": "CHAR-0002",
+            "canonical_name": "Viktor", "chinese_name": "维克托", "note": "确认国王与 Viktor 是同一角色",
+        })
+        _, _, _, bundle = build_profiles(self.project)
+        self.assertNotIn("CHAR-0003", {item["character_id"] for item in bundle["profiles"]})
+        viktor = next(item for item in bundle["profiles"] if item["character_id"] == "CHAR-0002")
+        self.assertEqual(viktor["fields"]["story_role"]["value_zh"], "男主")
+        self.assertEqual(viktor["fields"]["story_role"]["status"], "user_confirmed")
 
 
 if __name__ == "__main__":

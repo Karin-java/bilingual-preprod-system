@@ -17,9 +17,17 @@ def json_bytes(value: object) -> bytes:
 def registry_context(project_dir: Path, units: list[dict], chapter_id: str) -> dict:
     registry_path = project_dir / "data" / "registries" / "entities.json"
     if not registry_path.exists():
-        return {"registry_version": None, "registry_sha256": None, "selection_strategy": "lexical-major-recent-v1", "total_characters": 0, "total_locations": 0, "characters": [], "locations": []}
+        return {"registry_version": None, "registry_sha256": None, "profile_sha256": None, "selection_strategy": "lexical-major-recent-v1", "total_characters": 0, "total_locations": 0, "characters": [], "locations": []}
     data = registry_path.read_bytes()
     registry = json.loads(data.decode("utf-8"))
+    registry_hash = hashlib.sha256(data).hexdigest()
+    profile_path = project_dir / "data" / "profiles" / "profiles.json"
+    profile_data = profile_path.read_bytes() if profile_path.exists() else None
+    profile_bundle = json.loads(profile_data.decode("utf-8")) if profile_data else {"profiles": []}
+    if profile_bundle.get("registry_input", {}).get("sha256") != registry_hash:
+        profile_data = None
+        profile_bundle = {"profiles": []}
+    profiles = {item["character_id"]: item for item in profile_bundle["profiles"]}
     source = "\n".join(unit["source_text"] for unit in units).casefold()
     current_number = int(chapter_id[1:])
     prior_numbers = sorted({int(value[1:]) for item in registry["characters"] for value in item["chapter_ids"] if int(value[1:]) < current_number})
@@ -42,12 +50,20 @@ def registry_context(project_dir: Path, units: list[dict], chapter_id: str) -> d
     ]
     return {
         "registry_version": registry["registry_version"],
-        "registry_sha256": hashlib.sha256(data).hexdigest(),
+        "registry_sha256": registry_hash,
+        "profile_sha256": hashlib.sha256(profile_data).hexdigest() if profile_data else None,
         "selection_strategy": "lexical-major-recent-v1",
         "total_characters": len(registry["characters"]),
         "total_locations": len(registry["locations"]),
         "characters": [
-            {key: item[key] for key in ("character_id", "entity_keys", "canonical_name", "chinese_name", "aliases", "chinese_aliases")}
+            {
+                **{key: item[key] for key in ("character_id", "entity_keys", "canonical_name", "chinese_name", "aliases", "chinese_aliases")},
+                "profile_fields": {
+                    field: {"value_zh": value["value_zh"], "status": value["status"]}
+                    for field, value in profiles.get(item["character_id"], {}).get("fields", {}).items()
+                    if value["status"] != "unknown"
+                },
+            }
             for item in selected_characters
         ],
         "locations": [

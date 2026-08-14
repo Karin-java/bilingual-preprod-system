@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bilingual-preprod.local/schemas/profile-decision-event.schema.json",
+  "title": "Append-only character profile decision",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "event_id", "recorded_at", "actor", "operation", "character_ref", "field", "value_zh", "normalized_value", "note", "target_event_id"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "event_id": {"$ref": "common.schema.json#/$defs/profileDecisionEventId"},
+    "recorded_at": {"type": "string", "format": "date-time"},
+    "actor": {
+      "type": "object", "additionalProperties": false, "required": ["type", "label"],
+      "properties": {"type": {"enum": ["user", "agent"]}, "label": {"type": "string", "minLength": 1}}
+    },
+    "operation": {"enum": ["set_field", "retract_event"]},
+    "character_ref": {"type": ["string", "null"]},
+    "field": {"type": ["string", "null"]},
+    "value_zh": {"type": ["string", "null"]},
+    "normalized_value": {"type": ["string", "null"]},
+    "note": {"type": "string", "minLength": 1},
+    "target_event_id": {"anyOf": [{"$ref": "common.schema.json#/$defs/profileDecisionEventId"}, {"type": "null"}]}
+  }
+}

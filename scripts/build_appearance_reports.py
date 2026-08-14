@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from build_registries import atomic_write, build_registries, json_bytes, load_analyses, sha256
+from build_profiles import build_profile_data, build_profiles
 from validate_registries import validate_registries
 
 ON_SCREEN_TYPES = {"physical", "dream", "flashback"}
@@ -71,6 +72,15 @@ def build_appearance_data(project_dir: Path) -> tuple[dict[str, Any], str, str]:
         raise ValueError("entity registry validation failed: " + "; ".join(registry_errors))
     registry_data = registry_path.read_bytes()
     registry = json.loads(registry_data.decode("utf-8"))
+    profile_path = project_dir / "data" / "profiles" / "profiles.json"
+    if not profile_path.exists():
+        build_profiles(project_dir)
+    profile_data = profile_path.read_bytes()
+    profile_bundle = json.loads(profile_data.decode("utf-8"))
+    expected_profiles, _, _ = build_profile_data(project_dir)
+    if profile_bundle != expected_profiles:
+        raise ValueError("character profiles are stale; rebuild profiles before appearance reports")
+    profiles = {item["character_id"]: item for item in profile_bundle["profiles"]}
     loaded = load_analyses(project_dir)
     analyses = [item[0] for item in loaded]
     character_by_id = {item["character_id"]: item for item in registry["characters"]}
@@ -159,6 +169,7 @@ def build_appearance_data(project_dir: Path) -> tuple[dict[str, Any], str, str]:
         "schema_version": "2.0.0",
         "appearance_version": "appearance-registry-v1",
         "registry_input": {"path": registry_path.relative_to(project_dir).as_posix(), "sha256": sha256(registry_data)},
+        "profile_input": {"path": profile_path.relative_to(project_dir).as_posix(), "sha256": sha256(profile_data)},
         "analysis_inputs": [
             {"chapter_id": analysis["chapter_id"], "path": path.relative_to(project_dir).as_posix(), "sha256": sha256(data)}
             for analysis, path, data in loaded
@@ -173,7 +184,7 @@ def build_appearance_data(project_dir: Path) -> tuple[dict[str, Any], str, str]:
         "chapter_rows": chapter_rows,
         "major_character_scenes": major_scenes,
     }
-    return bundle, render_chapter_table(bundle, registry, scene_by_id), render_major_scenes(bundle, registry, scene_by_id)
+    return bundle, render_chapter_table(bundle, registry, scene_by_id), render_major_scenes(bundle, registry, scene_by_id, profiles)
 
 
 def render_chapter_table(bundle: dict[str, Any], registry: dict[str, Any], scene_by_id: dict[str, dict[str, Any]]) -> str:
@@ -224,18 +235,19 @@ def render_chapter_table(bundle: dict[str, Any], registry: dict[str, Any], scene
     return "\n".join(lines).rstrip() + "\n"
 
 
-def render_major_scenes(bundle: dict[str, Any], registry: dict[str, Any], scene_by_id: dict[str, dict[str, Any]]) -> str:
+def render_major_scenes(bundle: dict[str, Any], registry: dict[str, Any], scene_by_id: dict[str, dict[str, Any]], profiles: dict[str, dict[str, Any]]) -> str:
     characters = {item["character_id"]: item for item in registry["characters"]}
     by_character: dict[str, list[dict[str, Any]]] = {}
     for item in bundle["major_character_scenes"]:
         by_character.setdefault(item["character_id"], []).append(item)
     lines = ["# 主要角色出镜场景统计", ""]
     if bundle["major_selection"]["provisional"]:
-        lines.extend(["当前包含尚待全书复盘确认的主要角色候选；基本信息将在人物档案阶段补齐，正式定位确认后本文件可直接重建。", ""])
+        lines.extend(["当前包含尚待全书复盘确认的主要角色候选；基本信息读取当前人物档案，正式定位确认后本文件可直接重建。", ""])
     for character_id in sorted(by_character, key=character_number):
         character = characters[character_id]
         name = (f"{character['chinese_name']} / " if character["chinese_name"] else "") + character["canonical_name"]
-        basic_info = f"{IMPORTANCE_LABELS[character['importance']]}；详细身份待完整剧本复盘补充"
+        profile = profiles.get(character_id)
+        basic_info = profile["basic_info_summary_zh"] if profile else f"{IMPORTANCE_LABELS[character['importance']]}；详细身份待完整剧本复盘补充"
         lines.extend([
             f"## {name}", "", f"**基本信息**：{basic_info}", "",
             "| 出场章节 | 出场场景（原文位置） | 时间 | 备注 |",
@@ -261,6 +273,7 @@ def render_major_scenes(bundle: dict[str, Any], registry: dict[str, Any], scene_
 
 def build_appearance_reports(project_dir: Path) -> tuple[Path, Path, Path, dict[str, Any]]:
     project_dir = project_dir.resolve()
+    build_profiles(project_dir)
     data_path = project_dir / "data" / "appearances" / "appearances.json"
     chapter_report = project_dir / "deliverables" / "全角色章节出镜表.md"
     major_report = project_dir / "deliverables" / "主要角色场景统计.md"

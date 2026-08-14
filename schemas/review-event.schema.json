@@ -20,7 +20,7 @@
         "label": {"type": "string", "minLength": 1}
       }
     },
-    "scope_type": {"enum": ["chapter", "scene", "beat", "source_unit", "segment", "character_observation"]},
+    "scope_type": {"enum": ["chapter", "scene", "beat", "source_unit", "segment", "character_observation", "profile_observation"]},
     "scope_id": {"type": "string", "minLength": 1},
     "operation": {"enum": ["set_field", "add_note", "retract_event"]},
     "field_path": {"type": ["string", "null"]},

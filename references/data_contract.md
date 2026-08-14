@@ -29,11 +29,14 @@ project/
 │   ├── registries/entities.json
 │   ├── registries/terminology.json
 │   ├── appearances/appearances.json
-│   └── profiles.json
+│   └── profiles/
+│       ├── profiles.json
+│       └── profile-decisions.jsonl
 ├── work/
 │   ├── analysis/p01.packet.json
 │   ├── review/p01.review.md
-│   └── registry/entities.md
+│   ├── registry/entities.md
+│   └── recap/角色资料复盘清单.md
 ├── deliverables/
 │   ├── scripts_bilingual/p01.md
 │   ├── 全角色章节出镜表.md
@@ -64,6 +67,8 @@ project/
 - `appearance.schema.json`：角色的一次出镜或被提及记录。
 - `appearance-bundle.schema.json`：出镜事实、角色章节聚合和主要角色场景聚合的可重建机器数据。
 - `character-profile.schema.json`：人物参数、证据、明确/推断/冲突/未知状态。
+- `profile-bundle.schema.json`：跨章合并后的角色档案、输入哈希和待复盘任务。
+- `profile-decision-event.schema.json`：不回写旧章节的角色资料确认或撤销事件。
 - `extension-manifest.schema.json`：报告、美术提示词等扩展模块的输入输出声明。
 
 JSONL 文件每行必须是一个完整 JSON 对象，并独立符合相应 Schema。不得把跨行 JSON 写入 JSONL。
@@ -80,6 +85,8 @@ JSONL 文件每行必须是一个完整 JSON 对象，并独立符合相应 Sche
 | 角色 | `CHAR-{NNNN}` | `CHAR-0001` |
 | 地点 | `LOC-{NNNN}` | `LOC-0001` |
 | 出镜记录 | `APP-{chapter}-{NNNN}` | `APP-P01-0001` |
+| 角色资料线索 | `POBS-{chapter}-{NNNN}` | `POBS-P01-0001` |
+| 角色资料确认 | `PROFILE-{NNNNNN}` | `PROFILE-000001` |
 
 编号依据源顺序或首次确认顺序生成。修正名称、译文或人物属性时不得更换 ID。两个既有角色确认属于同一人时，保留首次分配记录，并让旧 ID、概念键和全部名称索引解析到统一角色；下游不得直接以显示名称作为主键。
 `P00` 专用于第一个章节标题之前确实存在的前置文本；正文首章从 `P01` 开始。超过 99 章后自然扩展为 `P100`。
