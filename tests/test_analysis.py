@@ -20,9 +20,11 @@ from manage_profile_decisions import append_event as append_profile_event  # noq
 from prepare_analysis import prepare_packet  # noqa: E402
 from render_chapter import render_chapter  # noqa: E402
 from review_analysis import append_event, materialize  # noqa: E402
+from run_pipeline import acknowledge_recap, retract_recap, run_pipeline  # noqa: E402
 from validate_analysis import validate_analysis  # noqa: E402
 from validate_appearance_reports import validate_appearance_reports  # noqa: E402
 from validate_profiles import validate_profiles  # noqa: E402
+from validate_pipeline import validate_pipeline  # noqa: E402
 from validate_render import validate_render  # noqa: E402
 from validate_registries import validate_registries  # noqa: E402
 
@@ -753,6 +755,105 @@ class AnalysisTests(unittest.TestCase):
         viktor = next(item for item in bundle["profiles"] if item["character_id"] == "CHAR-0002")
         self.assertEqual(viktor["fields"]["story_role"]["value_zh"], "男主")
         self.assertEqual(viktor["fields"]["story_role"]["status"], "user_confirmed")
+
+    def test_pipeline_resumes_with_one_bounded_task_and_reuses_valid_outputs(self) -> None:
+        first = run_pipeline(self.project)
+        self.assertEqual(first["status"], "waiting_for_profile_recap")
+        self.assertEqual(first["next_task"]["task_type"], "review_character_profile")
+        self.assertEqual(first["next_task"]["character_id"], "CHAR-0001")
+        self.assertEqual(first["last_run"]["agent_input_utf8_bytes"], first["next_task"]["input_utf8_bytes"])
+        second = run_pipeline(self.project)
+        self.assertEqual(second["last_run"]["reused_chapters"], 1)
+        self.assertEqual(second["last_run"]["rebuilt_chapters"], 0)
+        self.assertEqual(second["last_run"]["reused_global_outputs"], 3)
+        self.assertEqual(second["last_run"]["rebuilt_global_outputs"], 0)
+        self.assertEqual(second["next_task"]["task_sha256"], first["next_task"]["task_sha256"])
+        self.assertEqual(validate_pipeline(self.project), [])
+
+    def test_pipeline_recap_acknowledgement_and_retraction_are_append_only(self) -> None:
+        state = run_pipeline(self.project)
+        character_id = state["next_task"]["character_id"]
+        event, after = acknowledge_recap(self.project, character_id, "完整材料仍未说明其余参数", "验收用户")
+        self.assertEqual(event["event_id"], "RECAPREV-000001")
+        self.assertEqual(after["next_task"]["character_id"], "CHAR-0002")
+        retract, restored = retract_recap(self.project, event["event_id"], "需要重新复盘", "验收用户")
+        self.assertEqual(retract["event_id"], "RECAPREV-000002")
+        self.assertEqual(restored["next_task"]["character_id"], "CHAR-0001")
+        self.assertEqual(restored["recap_review_log"]["retracted_event_ids"], [event["event_id"]])
+        self.assertEqual(validate_pipeline(self.project), [])
+
+    def test_pipeline_only_prepares_the_first_missing_chapter(self) -> None:
+        source = self.root / "two-chapters.txt"
+        source.write_text("Chapter 1\nFirst chapter.\nChapter 2\nSecond chapter.\n", encoding="utf-8")
+        project = ingest_source(source, self.root / "two-chapter-project", "Two Chapter Pipeline")
+        first = run_pipeline(project)
+        self.assertEqual(first["status"], "waiting_for_chapter_analysis")
+        self.assertEqual(first["next_task"]["chapter_id"], "P01")
+        self.assertTrue((project / "work" / "analysis" / "p01.packet.json").exists())
+        self.assertFalse((project / "work" / "analysis" / "p02.packet.json").exists())
+        packet_before = (project / "work" / "analysis" / "p01.packet.json").read_bytes()
+        second = run_pipeline(project)
+        self.assertEqual(second["next_task"]["chapter_id"], "P01")
+        self.assertEqual((project / "work" / "analysis" / "p01.packet.json").read_bytes(), packet_before)
+        self.assertEqual(second["last_run"]["rebuilt_chapters"], 0)
+        self.assertEqual(validate_pipeline(project), [])
+
+    def test_pipeline_updates_compact_registry_before_preparing_next_chapter(self) -> None:
+        source = self.root / "sequential.txt"
+        source.write_bytes(
+            b"Chapter 1\n"
+            b"At night, Violette entered the king's study.\n"
+            b"Violette bowed. \"Your slave is here, my King.\"\n"
+            b"The king looked up.\n"
+            b"Chapter 2\n"
+            b"Violette waited.\n"
+        )
+        project = ingest_source(source, self.root / "sequential-project", "Sequential Pipeline")
+        first = run_pipeline(project)
+        self.assertEqual(first["next_task"]["chapter_id"], "P01")
+        p01_packet_path = project / "work" / "analysis" / "p01.packet.json"
+        p01_packet = json.loads(p01_packet_path.read_text(encoding="utf-8"))
+        analysis = copy.deepcopy(self.analysis)
+        analysis["source_sha256"] = p01_packet["source_sha256"]
+        analysis["input_packet_sha256"] = hashlib.sha256(p01_packet_path.read_bytes()).hexdigest()
+        p01_analysis_path = project / p01_packet["output_path"]
+        p01_analysis_path.parent.mkdir(parents=True, exist_ok=True)
+        p01_analysis_path.write_text(json.dumps(analysis, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        second = run_pipeline(project)
+        self.assertEqual(second["next_task"]["chapter_id"], "P02")
+        p02_packet = json.loads((project / "work" / "analysis" / "p02.packet.json").read_text(encoding="utf-8"))
+        self.assertEqual([item["character_id"] for item in p02_packet["registry_context"]["characters"]], ["CHAR-0001", "CHAR-0002"])
+        self.assertEqual(p02_packet["registry_context"]["total_characters"], 2)
+        self.assertFalse((project / "data" / "analysis" / "p02.analysis.json").exists())
+        self.assertEqual(validate_pipeline(project), [])
+
+    def test_pipeline_routes_invalid_analysis_to_targeted_repair(self) -> None:
+        changed = copy.deepcopy(self.analysis)
+        changed["scenes"][0]["boundary_evidence"][0]["quote"] = "fabricated boundary"
+        self.write_analysis(changed)
+        state = run_pipeline(self.project)
+        self.assertEqual(state["status"], "chapter_needs_repair")
+        self.assertEqual(state["next_task"]["task_type"], "repair_chapter")
+        self.assertEqual(state["next_task"]["chapter_id"], "P01")
+        self.assertIn("evidence quote is not present", " ".join(state["next_task"]["reason"]))
+        self.assertEqual(state["global_outputs"]["registries"]["status"], "not_available")
+        self.assertEqual(validate_pipeline(self.project), [])
+
+    def test_pipeline_completes_after_each_current_recap_package_is_reviewed(self) -> None:
+        state = run_pipeline(self.project)
+        reviewed: list[str] = []
+        while state["next_task"] is not None:
+            self.assertEqual(state["next_task"]["task_type"], "review_character_profile")
+            character_id = state["next_task"]["character_id"]
+            reviewed.append(character_id)
+            _, state = acknowledge_recap(self.project, character_id, "完整材料仍未提供其余参数", "验收用户")
+        self.assertEqual(reviewed, ["CHAR-0001", "CHAR-0002"])
+        self.assertEqual(state["status"], "complete")
+        self.assertEqual(state["last_run"]["agent_input_utf8_bytes"], 0)
+        self.assertFalse((self.project / "work" / "pipeline" / "next-task.json").exists())
+        project = json.loads((self.project / "project.json").read_text(encoding="utf-8"))
+        self.assertEqual(project["state"], "validated")
+        self.assertEqual(validate_pipeline(self.project), [])
 
 
 if __name__ == "__main__":

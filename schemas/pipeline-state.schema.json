@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bilingual-preprod.local/schemas/pipeline-state.schema.json",
+  "title": "Resumable pre-production pipeline snapshot",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "pipeline_version", "project_id", "source_manifest", "status", "chapters", "global_outputs", "recap_review_log", "next_task", "last_run"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "pipeline_version": {"const": "preprod-pipeline-v1"},
+    "project_id": {"type": "string", "pattern": "^PRJ-[a-z0-9][a-z0-9-]{0,62}$"},
+    "source_manifest": {"$ref": "#/$defs/input"},
+    "status": {"enum": ["waiting_for_chapter_analysis", "chapter_needs_repair", "waiting_for_profile_recap", "complete"]},
+    "chapters": {"type": "array", "items": {"$ref": "#/$defs/chapter"}},
+    "global_outputs": {
+      "type": "object", "additionalProperties": false,
+      "required": ["registries", "profiles", "appearances"],
+      "properties": {
+        "registries": {"$ref": "#/$defs/outputStatus"},
+        "profiles": {"$ref": "#/$defs/outputStatus"},
+        "appearances": {"$ref": "#/$defs/outputStatus"}
+      }
+    },
+    "recap_review_log": {
+      "type": "object", "additionalProperties": false, "required": ["path", "sha256", "active_event_ids", "retracted_event_ids"],
+      "properties": {
+        "path": {"const": "data/pipeline/recap-review.events.jsonl"},
+        "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "active_event_ids": {"type": "array", "uniqueItems": true, "items": {"type": "string", "pattern": "^RECAPREV-[0-9]{6}$"}},
+        "retracted_event_ids": {"type": "array", "uniqueItems": true, "items": {"type": "string", "pattern": "^RECAPREV-[0-9]{6}$"}}
+      }
+    },
+    "next_task": {"anyOf": [{"$ref": "pipeline-task.schema.json"}, {"type": "null"}]},
+    "last_run": {
+      "type": "object", "additionalProperties": false,
+      "required": ["reused_chapters", "rebuilt_chapters", "reused_global_outputs", "rebuilt_global_outputs", "agent_input_utf8_bytes", "estimated_input_tokens_min", "estimated_input_tokens_max", "token_estimate_method"],
+      "properties": {
+        "reused_chapters": {"type": "integer", "minimum": 0},
+        "rebuilt_chapters": {"type": "integer", "minimum": 0},
+        "reused_global_outputs": {"type": "integer", "minimum": 0},
+        "rebuilt_global_outputs": {"type": "integer", "minimum": 0},
+        "agent_input_utf8_bytes": {"type": "integer", "minimum": 0},
+        "estimated_input_tokens_min": {"type": "integer", "minimum": 0},
+        "estimated_input_tokens_max": {"type": "integer", "minimum": 0},
+        "token_estimate_method": {"const": "character-class-range-v1; actual usage depends on model tokenizer"}
+      }
+    }
+  },
+  "$defs": {
+    "input": {"type": "object", "additionalProperties": false, "required": ["path", "sha256"], "properties": {"path": {"type": "string", "minLength": 1}, "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}}},
+    "outputStatus": {
+      "type": "object", "additionalProperties": false, "required": ["status", "path", "sha256"],
+      "properties": {"status": {"enum": ["not_available", "reused", "rebuilt"]}, "path": {"type": ["string", "null"]}, "sha256": {"type": ["string", "null"], "pattern": "^[a-f0-9]{64}$"}}
+    },
+    "chapter": {
+      "type": "object", "additionalProperties": false,
+      "required": ["chapter_id", "source_sha256", "status", "packet", "analysis", "resolved_view", "render", "pending_issue_count", "errors"],
+      "properties": {
+        "chapter_id": {"$ref": "common.schema.json#/$defs/chapterId"},
+        "source_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "status": {"enum": ["waiting_analysis", "needs_repair", "ready"]},
+        "packet": {"anyOf": [{"$ref": "#/$defs/input"}, {"type": "null"}]},
+        "analysis": {"anyOf": [{"$ref": "#/$defs/input"}, {"type": "null"}]},
+        "resolved_view": {"anyOf": [{"$ref": "#/$defs/input"}, {"type": "null"}]},
+        "render": {"anyOf": [{"$ref": "#/$defs/input"}, {"type": "null"}]},
+        "pending_issue_count": {"type": "integer", "minimum": 0},
+        "errors": {"type": "array", "items": {"type": "string", "minLength": 1}}
+      }
+    }
+  }
+}

@@ -29,19 +29,24 @@ project/
 │   ├── registries/entities.json
 │   ├── registries/terminology.json
 │   ├── appearances/appearances.json
-│   └── profiles/
-│       ├── profiles.json
-│       └── profile-decisions.jsonl
+│   ├── profiles/
+│   │   ├── profiles.json
+│   │   └── profile-decisions.jsonl
+│   └── pipeline/
+│       ├── state.json
+│       └── recap-review.events.jsonl
 ├── work/
 │   ├── analysis/p01.packet.json
 │   ├── review/p01.review.md
 │   ├── registry/entities.md
-│   └── recap/角色资料复盘清单.md
+│   ├── recap/角色资料复盘清单.md
+│   └── pipeline/next-task.json
 ├── deliverables/
 │   ├── scripts_bilingual/p01.md
 │   ├── 全角色章节出镜表.md
 │   ├── 主要角色场景统计.md
-│   └── 角色基础信息档案.md
+│   ├── 角色基础信息档案.md
+│   └── 制作进度.md
 └── extensions/
     ├── reports/
     └── art-prompts/
@@ -69,6 +74,8 @@ project/
 - `character-profile.schema.json`：人物参数、证据、明确/推断/冲突/未知状态。
 - `profile-bundle.schema.json`：跨章合并后的角色档案、输入哈希和待复盘任务。
 - `profile-decision-event.schema.json`：不回写旧章节的角色资料确认或撤销事件。
+- `pipeline-state.schema.json` / `pipeline-task.schema.json`：断点续跑快照和唯一下一任务。
+- `recap-review-event.schema.json`：单角色全书复盘包的验收与撤销记录。
 - `extension-manifest.schema.json`：报告、美术提示词等扩展模块的输入输出声明。
 
 JSONL 文件每行必须是一个完整 JSON 对象，并独立符合相应 Schema。不得把跨行 JSON 写入 JSONL。

@@ -50,6 +50,25 @@ description: 解说剧全流程前筹系统：无损拆分英文原始剧本，�
 
 ## 当前执行入口
 
+优先使用总管线启动或续跑。它每次只暴露一个有界任务，并自动复用已经通过校验的阶段：
+
+总管线运行时读取 `references/pipeline_rules.md`；不要绕过唯一下一任务一次加载多章。
+
+```text
+python scripts/run_pipeline.py start <source> --project-dir <project>
+python scripts/run_pipeline.py resume <project>
+python scripts/run_pipeline.py status <project>
+python scripts/validate_pipeline.py <project>
+```
+
+执行 `work/pipeline/next-task.json` 声明的唯一任务。若为全书人物复盘且完整材料仍无法确认剩余参数，验收当前角色包后继续：
+
+```text
+python scripts/run_pipeline.py ack-recap <project> --character CHAR-0001 --note <review-result>
+```
+
+需要单独诊断阶段时再使用以下细分入口：
+
 ```text
 python scripts/ingest_source.py <source> --project-dir <project>
 python scripts/validate_ingest.py <project>
@@ -119,5 +138,8 @@ python scripts/review_analysis.py retract <project> --chapter P01 --event REV-P0
 - `scripts/build_profiles.py`：按统一角色永久编号聚合逐章资料事实，生成角色档案和只含未决项的全书复盘清单。
 - `scripts/manage_profile_decisions.py`：追加或撤销全局人物资料确认，不回写已经完成的章节。
 - `scripts/validate_profiles.py`：校验必需人物参数、证据、跨章归并、未知项和 Markdown 可重建性。
+- `references/pipeline_rules.md`：唯一下一任务、阶段失效边界、复用、单角色复盘和成本统计规则。
+- `scripts/run_pipeline.py`：启动或续跑总管线，生成机器状态、唯一下一任务和用户可读制作进度。
+- `scripts/validate_pipeline.py`：校验断点状态、任务输入指纹、复用产物、复盘事件和制作进度可重建性。
 
 每完成一个流水线阶段即运行对应校验。失败时只返修受影响的章节、场景或记录，不重跑已通过的全量数据。
