@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bilingual-preprod.local/schemas/appearance.schema.json",
+  "title": "Character appearance",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "appearance_id", "character_id", "chapter_id", "scene_id", "appearance_type", "has_dialogue", "source_unit_ids", "evidence"],
+  "properties": {
+    "schema_version": {"const": "2.0.0"},
+    "appearance_id": {"type": "string", "pattern": "^APP-P[0-9]{2,}-[0-9]{4}$"},
+    "character_id": {"$ref": "common.schema.json#/$defs/characterId"},
+    "chapter_id": {"$ref": "common.schema.json#/$defs/chapterId"},
+    "scene_id": {"anyOf": [{"$ref": "common.schema.json#/$defs/sceneId"}, {"type": "null"}]},
+    "appearance_type": {"enum": ["physical", "dialogue", "flashback", "dream", "mentioned", "unknown"]},
+    "has_dialogue": {"type": "boolean"},
+    "source_unit_ids": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "common.schema.json#/$defs/sourceUnitId"}},
+    "evidence": {"type": "array", "minItems": 1, "items": {"$ref": "common.schema.json#/$defs/evidence"}}
+  }
+}

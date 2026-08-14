@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bilingual-preprod.local/schemas/source-manifest.schema.json",
+  "title": "Source ingestion manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "project_id", "source", "canonical", "chapter_detection", "chapters"],
+  "properties": {
+    "schema_version": {"const": "2.0.0"},
+    "project_id": {"type": "string", "pattern": "^PRJ-[a-z0-9][a-z0-9-]{0,62}$"},
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["filename", "format", "encoding", "copy_path", "byte_length", "sha256", "warnings"],
+      "properties": {
+        "filename": {"type": "string", "minLength": 1},
+        "format": {"enum": ["txt", "md", "docx"]},
+        "encoding": {"type": "string", "minLength": 1},
+        "copy_path": {"type": "string", "pattern": "^source/original[.]input[.][A-Za-z0-9]+$"},
+        "byte_length": {"type": "integer", "minimum": 0},
+        "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "warnings": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "canonical": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "encoding", "character_length", "byte_length", "sha256", "rule"],
+      "properties": {
+        "path": {"const": "source/original.txt"},
+        "encoding": {"const": "utf-8"},
+        "character_length": {"type": "integer", "minimum": 1},
+        "byte_length": {"type": "integer", "minimum": 1},
+        "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "rule": {"type": "string", "minLength": 1}
+      }
+    },
+    "chapter_detection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["method", "status", "warnings"],
+      "properties": {
+        "method": {"const": "anchored-heading-v1"},
+        "status": {"enum": ["detected", "single_chapter_review", "detected_with_preamble"]},
+        "warnings": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "chapters": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["chapter_id", "ordinal", "heading", "source_label", "source_start", "source_end", "character_length", "sha256", "source_path", "units_path", "unit_count"],
+        "properties": {
+          "chapter_id": {"$ref": "common.schema.json#/$defs/chapterId"},
+          "ordinal": {"type": "integer", "minimum": 0},
+          "heading": {"type": ["string", "null"]},
+          "source_label": {"type": ["string", "null"]},
+          "source_start": {"type": "integer", "minimum": 0},
+          "source_end": {"type": "integer", "minimum": 1},
+          "character_length": {"type": "integer", "minimum": 1},
+          "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+          "source_path": {"type": "string", "pattern": "^source/chapters/p[0-9]{2,}[.]txt$"},
+          "units_path": {"type": "string", "pattern": "^data/units/p[0-9]{2,}[.]units[.]jsonl$"},
+          "unit_count": {"type": "integer", "minimum": 1}
+        }
+      }
+    }
+  }
+}

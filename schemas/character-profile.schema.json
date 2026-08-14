@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bilingual-preprod.local/schemas/character-profile.schema.json",
+  "title": "Character profile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "character_id", "fields"],
+  "properties": {
+    "schema_version": {"const": "2.0.0"},
+    "character_id": {"$ref": "common.schema.json#/$defs/characterId"},
+    "fields": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["age", "gender", "race", "identity", "appearance", "hair", "body_type", "special_marks", "clothing", "personality"],
+      "properties": {
+        "age": {"$ref": "#/$defs/profileField"},
+        "gender": {"$ref": "#/$defs/profileField"},
+        "race": {"$ref": "#/$defs/profileField"},
+        "identity": {"$ref": "#/$defs/profileField"},
+        "appearance": {"$ref": "#/$defs/profileField"},
+        "hair": {"$ref": "#/$defs/profileField"},
+        "body_type": {"$ref": "#/$defs/profileField"},
+        "special_marks": {"$ref": "#/$defs/profileField"},
+        "clothing": {"$ref": "#/$defs/profileField"},
+        "personality": {"$ref": "#/$defs/profileField"}
+      }
+    }
+  },
+  "$defs": {
+    "profileField": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value", "status", "confidence", "evidence"],
+      "properties": {
+        "value": {},
+        "status": {"$ref": "common.schema.json#/$defs/assessmentStatus"},
+        "confidence": {"$ref": "common.schema.json#/$defs/confidence"},
+        "evidence": {"type": "array", "items": {"$ref": "common.schema.json#/$defs/evidence"}},
+        "notes": {"type": "string"}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"status": {"const": "unknown"}}},
+          "then": {"properties": {"value": {"type": "null"}}},
+          "else": {"properties": {"evidence": {"minItems": 1}}}
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bilingual-preprod.local/schemas/source-unit.schema.json",
+  "title": "Source unit",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "unit_id", "chapter_id", "ordinal", "source_text", "source_sha256", "translation", "classification"],
+  "properties": {
+    "schema_version": {"const": "2.0.0"},
+    "unit_id": {"$ref": "common.schema.json#/$defs/sourceUnitId"},
+    "chapter_id": {"$ref": "common.schema.json#/$defs/chapterId"},
+    "ordinal": {"type": "integer", "minimum": 1},
+    "source_text": {"type": "string"},
+    "source_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "translation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["zh_cn", "status"],
+      "properties": {
+        "zh_cn": {"type": ["string", "null"]},
+        "status": {"enum": ["pending", "translated", "reviewed"]}
+      }
+    },
+    "classification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["text_type", "status", "confidence", "evidence"],
+      "properties": {
+        "text_type": {"enum": ["chapter_heading", "action", "narration", "dialogue", "inner_thought", "voice_over", "letter", "other", "unknown"]},
+        "speaker_character_id": {"anyOf": [{"$ref": "common.schema.json#/$defs/characterId"}, {"type": "null"}]},
+        "speaker_label": {"type": ["string", "null"]},
+        "status": {"$ref": "common.schema.json#/$defs/assessmentStatus"},
+        "confidence": {"$ref": "common.schema.json#/$defs/confidence"},
+        "evidence": {"type": "array", "items": {"$ref": "common.schema.json#/$defs/evidence"}}
+      }
+    }
+  }
+}

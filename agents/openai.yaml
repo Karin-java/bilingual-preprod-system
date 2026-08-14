@@ -1,0 +1,4 @@
+interface:
+  display_name: "双语解说剧前筹系统"
+  short_description: "从英文原文生成双语剧本与完整前筹数据"
+  default_prompt: "使用 $bilingual-preprod-system 无损拆分英文原文，生成中英标准剧本、场景与角色前筹数据，并完成证据化校验。"
