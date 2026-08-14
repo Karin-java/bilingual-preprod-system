@@ -21,6 +21,7 @@ from prepare_analysis import prepare_packet  # noqa: E402
 from render_chapter import render_chapter  # noqa: E402
 from review_analysis import append_event, materialize  # noqa: E402
 from run_pipeline import acknowledge_recap, retract_recap, run_pipeline  # noqa: E402
+from run_extension import discover, prepare_extension, validate_extension  # noqa: E402
 from validate_analysis import validate_analysis  # noqa: E402
 from validate_appearance_reports import validate_appearance_reports  # noqa: E402
 from validate_profiles import validate_profiles  # noqa: E402
@@ -854,6 +855,75 @@ class AnalysisTests(unittest.TestCase):
         project = json.loads((self.project / "project.json").read_text(encoding="utf-8"))
         self.assertEqual(project["state"], "validated")
         self.assertEqual(validate_pipeline(self.project), [])
+
+    def test_report_extension_is_optional_deterministic_and_does_not_duplicate_deliverables(self) -> None:
+        run_pipeline(self.project)
+        core_before = {
+            path.relative_to(self.project).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
+            for root in (self.project / "source", self.project / "data")
+            for path in root.rglob("*") if path.is_file()
+        }
+        first, reused_first = prepare_extension(self.project, "reports")
+        second, reused_second = prepare_extension(self.project, "reports")
+        core_after = {
+            path.relative_to(self.project).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
+            for root in (self.project / "source", self.project / "data")
+            for path in root.rglob("*") if path.is_file()
+        }
+        self.assertFalse(reused_first)
+        self.assertTrue(reused_second)
+        self.assertEqual(first["generated_at"], second["generated_at"])
+        self.assertEqual(core_before, core_after)
+        report = (self.project / "deliverables" / "前筹总览.md").read_text(encoding="utf-8")
+        self.assertIn("本页只整理完成状态和交付入口，不复制已有剧本", report)
+        self.assertIn("[打开](scripts_bilingual/p01.md)", report)
+        self.assertNotIn("Your slave is here", report)
+        self.assertFalse((self.project / "deliverables" / "前筹总览.docx").exists())
+        self.assertEqual(validate_extension(self.project, "reports"), [])
+
+    def test_art_prompt_extension_prepares_one_scene_with_versioned_core_inputs(self) -> None:
+        run_pipeline(self.project)
+        core_before = {
+            path.relative_to(self.project).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
+            for root in (self.project / "source", self.project / "data")
+            for path in root.rglob("*") if path.is_file()
+        }
+        state, _ = prepare_extension(self.project, "art-prompts", "P01-S001")
+        packet = json.loads((self.project / state["task"]["input_path"]).read_text(encoding="utf-8"))
+        core_after = {
+            path.relative_to(self.project).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
+            for root in (self.project / "source", self.project / "data")
+            for path in root.rglob("*") if path.is_file()
+        }
+        self.assertEqual(core_before, core_after)
+        self.assertEqual(packet["target"], {"type": "scene", "scene_id": "P01-S001", "chapter_id": "P01"})
+        self.assertEqual(packet["output_path"], "deliverables/art_prompts/p01-s001.md")
+        self.assertEqual({item["character_id"] for item in packet["characters"]}, {"CHAR-0001", "CHAR-0002"})
+        self.assertTrue(all({"quote_en", "translation_zh"} <= set(item) for item in packet["evidence"]))
+        self.assertEqual(
+            {item["data_type"] for item in state["inputs"]},
+            {"project", "chapter-analysis", "entity-registry", "profile-bundle", "appearance-bundle"},
+        )
+        self.assertTrue(all(item["schema_version"] for item in state["inputs"]))
+        self.assertEqual(state["status"], "ready_for_agent")
+        self.assertEqual(validate_extension(self.project, "art-prompts"), [])
+
+    def test_extension_validation_detects_stale_packet_without_touching_core(self) -> None:
+        run_pipeline(self.project)
+        state, _ = prepare_extension(self.project, "art-prompts", "P01-S001")
+        packet_path = self.project / state["task"]["input_path"]
+        packet_path.write_text("{}\n", encoding="utf-8")
+        self.assertTrue(any("artifact is missing or stale" in error for error in validate_extension(self.project, "art-prompts")))
+
+    def test_extension_manifests_do_not_restore_removed_legacy_outputs(self) -> None:
+        self.assertEqual({item["module_id"] for item in discover()}, {"reports", "art-prompts"})
+        extension_text = "\n".join(
+            path.read_text(encoding="utf-8")
+            for directory in (ROOT / "extensions", ROOT / "references")
+            for path in directory.rglob("*") if path.is_file() and path.suffix in {".py", ".json", ".md"}
+        )
+        for removed in ("该场合需设计资产", "附录二（服装编号总索引）", "character_glossary.md"):
+            self.assertNotIn(removed, extension_text)
 
 
 if __name__ == "__main__":

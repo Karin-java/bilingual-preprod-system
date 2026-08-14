@@ -1,0 +1,22 @@
+{
+  "manifest_version": "1.0.0",
+  "module_id": "reports",
+  "module_version": "1.0.0",
+  "display_name": "前筹报告整理",
+  "description": "从已校验事实层生成不复制正文的前筹导航总览。",
+  "execution_mode": "deterministic",
+  "consumes": [
+    {"data_type": "chapter-analysis", "version_range": "2.x", "required": true},
+    {"data_type": "entity-registry", "version_range": "2.x", "required": true},
+    {"data_type": "appearance-bundle", "version_range": "2.x", "required": true},
+    {"data_type": "profile-bundle", "version_range": "2.x", "required": true},
+    {"data_type": "pipeline-state", "version_range": "1.x", "required": false}
+  ],
+  "produces": [
+    {"artifact_type": "preproduction-overview", "format": "markdown"}
+  ],
+  "output_namespace": "extensions/reports/",
+  "delivery_path_patterns": ["deliverables/前筹总览.md"],
+  "entrypoint": "extensions/reports/handler.py:prepare",
+  "config_schema": null
+}

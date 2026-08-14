@@ -48,6 +48,8 @@ description: 解说剧全流程前筹系统：无损拆分英文原始剧本，�
 3. 将模块私有数据写入自己的命名空间。
 4. 保存输入哈希、模块版本和输出路径，使产物可追溯、可重建。
 
+扩展默认不随核心总管线自动执行。用户需要时再运行，扩展输入变化后才重建；扩展不得让已经完成的章节重新分析。报告整理使用确定性模式，美术提示词使用单 Scene 的有界 Agent 任务。运行美术任务前读取 `references/art_prompt_extension_rules.md`。
+
 ## 当前执行入口
 
 优先使用总管线启动或续跑。它每次只暴露一个有界任务，并自动复用已经通过校验的阶段：
@@ -60,6 +62,18 @@ python scripts/run_pipeline.py resume <project>
 python scripts/run_pipeline.py status <project>
 python scripts/validate_pipeline.py <project>
 ```
+
+核心流程完成到可用状态后，可按需运行独立扩展：
+
+```text
+python scripts/run_extension.py list
+python scripts/run_extension.py prepare <project> --module reports
+python scripts/run_extension.py prepare <project> --module art-prompts --target P03-S001
+python scripts/run_extension.py validate <project> --module reports
+python scripts/run_extension.py validate <project> --module art-prompts
+```
+
+`reports` 只生成 `deliverables/前筹总览.md`，作为已有交付文件的导航和状态摘要，不复制正文。`art-prompts` 只生成当前 Scene 的机器事实包和一个 Markdown 输出任务；Agent 只能读取该包，不得回读整本原文或补写待确认事实。
 
 执行 `work/pipeline/next-task.json` 声明的唯一任务。若为全书人物复盘且完整材料仍无法确认剩余参数，验收当前角色包后继续：
 
@@ -119,6 +133,10 @@ python scripts/review_analysis.py retract <project> --chapter P01 --event REV-P0
 - `references/data_contract.md`：事实层、稳定 ID、证据链、目录和扩展契约。
 - `schemas/*.schema.json`：核心记录和扩展清单的机器校验规则。
 - `scripts/validate_schemas.py`：校验 Schema 语法和本地引用。
+- `scripts/run_extension.py` / `scripts/validate_extensions.py`：发现、按需准备并校验可插拔扩展。
+- `extensions/reports/`：确定性前筹总览扩展。
+- `extensions/art-prompts/`：单 Scene 美术提示词任务扩展。
+- `references/art_prompt_extension_rules.md`：美术提示词的事实边界、未知项和默认 Markdown 交付规则。
 - `scripts/ingest_source.py`：无损接收 TXT、Markdown 或 DOCX，拆章并生成稳定原文单元。
 - `scripts/validate_ingest.py`：校验原文件、正文基线、章节和原文单元的指纹及重组完整性。
 - `references/analysis_rules.md`：文本片段、说话人、Scene、Beat、证据和人工复核规则。

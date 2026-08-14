@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bilingual-preprod.local/schemas/extension-run.schema.json",
+  "title": "Extension run snapshot",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "project_id", "module_id", "module_version", "execution_mode", "generated_at", "status", "target", "input_fingerprint", "inputs", "artifacts", "task", "summary_zh"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "project_id": {"type": "string", "pattern": "^PRJ-[a-z0-9][a-z0-9-]{0,62}$"},
+    "module_id": {"type": "string", "pattern": "^[a-z][a-z0-9-]{1,62}$"},
+    "module_version": {"type": "string", "pattern": "^[0-9]+[.][0-9]+[.][0-9]+$"},
+    "execution_mode": {"enum": ["deterministic", "agent_task"]},
+    "generated_at": {"type": "string", "format": "date-time"},
+    "status": {"enum": ["complete", "ready_for_agent"]},
+    "target": {"type": ["object", "null"]},
+    "input_fingerprint": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "inputs": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/fileDescriptor"}
+    },
+    "artifacts": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "allOf": [
+          {"$ref": "#/$defs/fileDescriptor"},
+          {
+            "type": "object",
+            "required": ["artifact_type", "format"],
+            "properties": {
+              "artifact_type": {"type": "string", "minLength": 1},
+              "format": {"enum": ["json", "jsonl", "markdown", "csv", "html", "pdf", "image", "other"]}
+            }
+          }
+        ]
+      }
+    },
+    "task": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["task_type", "target_id", "input_path", "input_sha256", "output_path", "output_format", "input_utf8_bytes", "estimated_input_tokens_min", "estimated_input_tokens_max", "token_estimate_method"],
+      "properties": {
+        "task_type": {"const": "create_art_prompt"},
+        "target_id": {"$ref": "common.schema.json#/$defs/sceneId"},
+        "input_path": {"type": "string", "pattern": "^extensions/art-prompts/work/.+[.]packet[.]json$"},
+        "input_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "output_path": {"type": "string", "pattern": "^deliverables/art_prompts/.+[.]md$"},
+        "output_format": {"const": "markdown"},
+        "input_utf8_bytes": {"type": "integer", "minimum": 1},
+        "estimated_input_tokens_min": {"type": "integer", "minimum": 1},
+        "estimated_input_tokens_max": {"type": "integer", "minimum": 1},
+        "token_estimate_method": {"type": "string", "minLength": 1}
+      }
+    },
+    "summary_zh": {"type": "string", "minLength": 1}
+  },
+  "$defs": {
+    "fileDescriptor": {
+      "type": "object",
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "data_type": {"type": "string", "minLength": 1},
+        "schema_version": {"type": "string", "pattern": "^[0-9]+[.][0-9]+[.][0-9]+$"}
+      }
+    }
+  }
+}
