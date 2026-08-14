@@ -12,11 +12,14 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from ingest_source import ingest_source  # noqa: E402
+from build_registries import build_registries, resolve_character_reference  # noqa: E402
+from manage_character_identities import append_identity_event  # noqa: E402
 from prepare_analysis import prepare_packet  # noqa: E402
 from render_chapter import render_chapter  # noqa: E402
 from review_analysis import append_event, materialize  # noqa: E402
 from validate_analysis import validate_analysis  # noqa: E402
 from validate_render import validate_render  # noqa: E402
+from validate_registries import validate_registries  # noqa: E402
 
 
 def evidence(unit_id: str, quote: str) -> list[dict[str, str]]:
@@ -128,6 +131,46 @@ class AnalysisTests(unittest.TestCase):
                     "evidence": evidence(u2, action2),
                 }],
             }],
+            "character_observations": [
+                {
+                    "observation_id": "COBS-P01-0001",
+                    "entity_key": "violette",
+                    "matched_character_id": None,
+                    "canonical_label": "Violette",
+                    "chinese_label": "薇奥莱特",
+                    "aliases": [],
+                    "chinese_aliases": [],
+                    "character_type": "named",
+                    "importance_hint": "candidate_major",
+                    "scene_id": "P01-S001",
+                    "presence_type": "physical",
+                    "has_dialogue": True,
+                    "speaker_segment_ids": ["P01-U0003-G002"],
+                    "source_unit_ids": [u2, u3],
+                    "status": "explicit",
+                    "confidence": 1,
+                    "evidence": evidence(u2, "Violette"),
+                },
+                {
+                    "observation_id": "COBS-P01-0002",
+                    "entity_key": "king",
+                    "matched_character_id": None,
+                    "canonical_label": "King",
+                    "chinese_label": "国王",
+                    "aliases": ["the king", "my King"],
+                    "chinese_aliases": [],
+                    "character_type": "role",
+                    "importance_hint": "candidate_major",
+                    "scene_id": "P01-S001",
+                    "presence_type": "physical",
+                    "has_dialogue": False,
+                    "speaker_segment_ids": [],
+                    "source_unit_ids": [u3, u4],
+                    "status": "explicit",
+                    "confidence": 1,
+                    "evidence": evidence(u4, "The king"),
+                },
+            ],
             "review": {"status": "ready", "issues": []},
         }
 
@@ -172,6 +215,8 @@ class AnalysisTests(unittest.TestCase):
         changed = copy.deepcopy(self.analysis)
         speaker = changed["unit_analyses"][2]["segments"][1]["speaker"]
         speaker.update({"kind": "unknown", "canonical_label": None, "chinese_label": None, "status": "unknown", "confidence": 0})
+        changed["character_observations"][0]["has_dialogue"] = False
+        changed["character_observations"][0]["speaker_segment_ids"] = []
         changed["review"] = {
             "status": "provisional",
             "issues": [{
@@ -276,6 +321,24 @@ class AnalysisTests(unittest.TestCase):
         self.assertEqual(translation["text_zh"], "“您的奴隶在此，吾王。”")
         self.assertEqual(translation["status"], "user_confirmed")
 
+    def test_character_observation_can_be_corrected_without_rewriting_base(self) -> None:
+        base_path = self.project / "data" / "analysis" / "p01.analysis.json"
+        base_before = base_path.read_bytes()
+        append_event(self.project, "P01", {
+            "actor": {"type": "user", "label": "验收人"},
+            "scope_type": "character_observation",
+            "scope_id": "COBS-P01-0002",
+            "operation": "set_field",
+            "field_path": "chinese_label",
+            "value": "本国国王",
+            "note": "与维克托国王区分",
+        })
+        resolved_path, _, _ = materialize(self.project, "P01")
+        resolved = json.loads(resolved_path.read_text(encoding="utf-8"))
+        self.assertEqual(base_path.read_bytes(), base_before)
+        self.assertEqual(resolved["character_observations"][1]["chinese_label"], "本国国王")
+        self.assertEqual(resolved["character_observations"][1]["status"], "user_confirmed")
+
     def test_user_can_accept_an_irreducible_unknown(self) -> None:
         changed = copy.deepcopy(self.analysis)
         changed["scenes"][0]["time_of_day"] = {
@@ -373,6 +436,145 @@ class AnalysisTests(unittest.TestCase):
         script_path, _, _, _ = render_chapter(self.project, "P01")
         script_path.write_text("tampered\n", encoding="utf-8")
         self.assertTrue(any("script hash mismatch" in error for error in validate_render(self.project, "P01")))
+
+    def test_entity_registry_is_stable_and_readable(self) -> None:
+        registry_path, review_path, registry = build_registries(self.project)
+        first_registry = registry_path.read_bytes()
+        first_review = review_path.read_bytes()
+        self.assertEqual([item["character_id"] for item in registry["characters"]], ["CHAR-0001", "CHAR-0002"])
+        self.assertEqual([item["canonical_name"] for item in registry["characters"]], ["Violette", "King"])
+        self.assertEqual(registry["locations"][0]["location_id"], "LOC-0001")
+        self.assertIn("CHAR-0001｜Violette / 薇奥莱特", first_review.decode("utf-8"))
+        self.assertIn("类型：具名角色", first_review.decode("utf-8"))
+        self.assertNotIn("candidate_major", first_review.decode("utf-8"))
+        build_registries(self.project)
+        self.assertEqual(registry_path.read_bytes(), first_registry)
+        self.assertEqual(review_path.read_bytes(), first_review)
+        self.assertEqual(validate_registries(self.project), [])
+
+    def test_registry_tampering_is_detected(self) -> None:
+        registry_path, _, registry = build_registries(self.project)
+        registry["characters"][0]["canonical_name"] = "Tampered"
+        registry_path.write_text(json.dumps(registry, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        self.assertTrue(any("deterministic rebuild" in error for error in validate_registries(self.project)))
+
+    def test_analysis_packet_includes_compact_registry_context(self) -> None:
+        build_registries(self.project)
+        packet_path, _ = prepare_packet(self.project, "P01", replace=True)
+        packet = json.loads(packet_path.read_text(encoding="utf-8"))
+        context = packet["registry_context"]
+        self.assertEqual(context["registry_version"], "entity-registry-v2")
+        self.assertEqual([item["character_id"] for item in context["characters"]], ["CHAR-0001", "CHAR-0002"])
+        self.assertEqual(context["locations"][0]["location_id"], "LOC-0001")
+
+    def add_king_viktor_observation(self, matched_character_id=None) -> None:
+        changed = copy.deepcopy(self.analysis)
+        observation = {
+            "observation_id": "COBS-P01-0003",
+            "entity_key": "king-viktor",
+            "matched_character_id": matched_character_id,
+            "canonical_label": "King Viktor",
+            "chinese_label": "维克托国王",
+            "aliases": ["Viktor"],
+            "chinese_aliases": ["维克托"],
+            "character_type": "named",
+            "importance_hint": "candidate_major",
+            "scene_id": "P01-S001",
+            "presence_type": "mentioned",
+            "has_dialogue": False,
+            "speaker_segment_ids": [],
+            "source_unit_ids": ["P01-U0004"],
+            "status": "explicit",
+            "confidence": 1,
+            "evidence": evidence("P01-U0004", "The king"),
+        }
+        existing_index = next((index for index, item in enumerate(changed["character_observations"]) if item["entity_key"] == "king-viktor"), None)
+        if existing_index is None:
+            changed["character_observations"].append(observation)
+        else:
+            changed["character_observations"][existing_index] = observation
+        self.analysis = changed
+        self.write_analysis(changed)
+
+    def test_confirmed_identity_merge_is_invisible_to_downstream(self) -> None:
+        self.add_king_viktor_observation()
+        base_before = (self.project / "data" / "analysis" / "p01.analysis.json").read_bytes()
+        _, _, before = build_registries(self.project)
+        self.assertEqual([item["character_id"] for item in before["characters"]], ["CHAR-0001", "CHAR-0002", "CHAR-0003"])
+        event = append_identity_event(self.project, {
+            "operation": "merge_characters",
+            "source_character_id": "CHAR-0003",
+            "target_character_id": "CHAR-0002",
+            "canonical_name": "Viktor",
+            "chinese_name": "维克托",
+            "aliases": ["King"],
+            "chinese_aliases": ["国王"],
+            "source_observation_ids": ["COBS-P01-0003"],
+            "actor": {"type": "user", "label": "验收人"},
+            "note": "确认国王与 Viktor 是同一角色",
+        })
+        registry = json.loads((self.project / "data" / "registries" / "entities.json").read_text(encoding="utf-8"))
+        self.assertEqual((self.project / "data" / "analysis" / "p01.analysis.json").read_bytes(), base_before)
+        self.assertEqual([item["character_id"] for item in registry["characters"]], ["CHAR-0001", "CHAR-0002"])
+        viktor = registry["characters"][1]
+        self.assertEqual((viktor["canonical_name"], viktor["chinese_name"]), ("Viktor", "维克托"))
+        self.assertEqual(registry["character_key_index"]["king"], "CHAR-0002")
+        self.assertEqual(registry["character_key_index"]["king-viktor"], "CHAR-0002")
+        self.assertEqual(registry["character_id_redirects"], {"CHAR-0003": "CHAR-0002"})
+        for reference in ("King", "国王", "Viktor", "维克托", "CHAR-0003"):
+            self.assertEqual(resolve_character_reference(registry, reference), {"status": "resolved", "character_id": "CHAR-0002"})
+        self.assertEqual(viktor["identity_event_ids"], [event["event_id"]])
+        self.assertEqual(validate_registries(self.project), [])
+        packet_path, _ = prepare_packet(self.project, "P01", replace=True)
+        context = json.loads(packet_path.read_text(encoding="utf-8"))["registry_context"]
+        context_viktor = next(item for item in context["characters"] if item["character_id"] == "CHAR-0002")
+        self.assertEqual(context_viktor["canonical_name"], "Viktor")
+        self.assertIn("King", context_viktor["aliases"])
+        self.assertNotIn("CHAR-0003", [item["character_id"] for item in context["characters"]])
+
+    def test_identity_merge_can_be_retracted_without_rewriting_analysis(self) -> None:
+        self.add_king_viktor_observation()
+        build_registries(self.project)
+        merge = append_identity_event(self.project, {
+            "operation": "merge_characters", "source_character_id": "CHAR-0003", "target_character_id": "CHAR-0002",
+            "canonical_name": "Viktor", "chinese_name": "维克托", "note": "确认同一角色",
+        })
+        append_identity_event(self.project, {
+            "operation": "retract_event", "target_event_id": merge["event_id"], "note": "撤销错误归并",
+        })
+        registry = json.loads((self.project / "data" / "registries" / "entities.json").read_text(encoding="utf-8"))
+        self.assertEqual([item["character_id"] for item in registry["characters"]], ["CHAR-0001", "CHAR-0002", "CHAR-0003"])
+        self.assertEqual(registry["character_id_redirects"], {})
+        self.assertEqual(registry["identity_event_log"]["retracted_event_ids"], [merge["event_id"]])
+        self.assertEqual(validate_registries(self.project), [])
+
+    def test_matched_id_conflict_becomes_bilingual_review_candidate(self) -> None:
+        self.add_king_viktor_observation()
+        build_registries(self.project)
+        self.add_king_viktor_observation(matched_character_id="CHAR-0002")
+        _, review_path, registry = build_registries(self.project)
+        self.assertEqual(registry["identity_candidates"][0]["candidate_id"], "IDN-0001")
+        review = review_path.read_text(encoding="utf-8")
+        self.assertIn("### IDN-0001", review)
+        self.assertIn("- 原文：The king", review)
+        self.assertIn("- 中文参考：", review)
+        self.assertGreaterEqual(review.count("\n---\n"), 2)
+        self.assertEqual(validate_registries(self.project), [])
+
+    def test_shared_role_name_remains_ambiguous_until_confirmed(self) -> None:
+        changed = copy.deepcopy(self.analysis)
+        changed["character_observations"].append({
+            "observation_id": "COBS-P01-0003", "entity_key": "northern-king", "matched_character_id": None,
+            "canonical_label": "Northern King", "chinese_label": "北境国王", "aliases": ["King"], "chinese_aliases": ["国王"],
+            "character_type": "role", "importance_hint": "supporting", "scene_id": "P01-S001", "presence_type": "mentioned",
+            "has_dialogue": False, "speaker_segment_ids": [], "source_unit_ids": ["P01-U0004"], "status": "explicit", "confidence": 1,
+            "evidence": evidence("P01-U0004", "The king"),
+        })
+        self.write_analysis(changed)
+        _, _, registry = build_registries(self.project)
+        result = resolve_character_reference(registry, "King")
+        self.assertEqual(result["status"], "ambiguous")
+        self.assertEqual(result["character_ids"], ["CHAR-0002", "CHAR-0003"])
 
 
 if __name__ == "__main__":

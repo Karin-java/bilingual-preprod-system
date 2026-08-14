@@ -212,6 +212,7 @@ def validate_analysis(project_dir: Path, chapter_id: str) -> list[str]:
     flattened_scenes: list[str] = []
     scene_ids: set[str] = set()
     beat_ids: set[str] = set()
+    scene_units_by_id: dict[str, set[str]] = {}
     for scene_ordinal, scene in enumerate(scenes, 1):
         context = f"scene {scene_ordinal}"
         if not isinstance(scene, dict):
@@ -229,6 +230,7 @@ def validate_analysis(project_dir: Path, chapter_id: str) -> list[str]:
             errors.append(f"{context}: source_unit_ids must be non-empty")
             scene_units = []
         flattened_scenes.extend(scene_units)
+        scene_units_by_id[expected_id] = set(scene_units)
         if any(unit_id not in source_texts for unit_id in scene_units):
             errors.append(f"{context}: references unknown source unit")
         check_evidence(scene.get("boundary_evidence"), source_texts, context + " boundary", errors)
@@ -293,6 +295,84 @@ def validate_analysis(project_dir: Path, chapter_id: str) -> list[str]:
     if flattened_scenes != content_unit_ids:
         errors.append("scenes must partition all non-heading content units exactly and in order")
 
+    observations = analysis.get("character_observations")
+    if not isinstance(observations, list):
+        errors.append("character_observations must be an array")
+        observations = []
+    observed_speaker_segment_counts: dict[str, int] = {}
+    observation_ids: set[str] = set()
+    for observation_index, observation in enumerate(observations, 1):
+        context = f"character observation {observation_index}"
+        if not isinstance(observation, dict):
+            errors.append(f"{context}: record is not an object")
+            continue
+        expected_id = f"COBS-{chapter_id}-{observation_index:04d}"
+        if observation.get("observation_id") != expected_id:
+            errors.append(f"{context}: must use stable ID {expected_id}")
+        else:
+            observation_ids.add(expected_id)
+        entity_key = observation.get("entity_key")
+        if not isinstance(entity_key, str) or not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", entity_key):
+            errors.append(f"{context}: entity_key is invalid")
+        if not isinstance(observation.get("canonical_label"), str) or not observation["canonical_label"].strip():
+            errors.append(f"{context}: canonical_label is required")
+        if observation.get("character_type") not in {"named", "role", "crowd"}:
+            errors.append(f"{context}: character_type is invalid")
+        if observation.get("importance_hint") not in {"candidate_major", "supporting", "minor", "unknown"}:
+            errors.append(f"{context}: importance_hint is invalid")
+        if observation.get("presence_type") not in {"physical", "dream", "flashback", "mentioned", "unknown"}:
+            errors.append(f"{context}: presence_type is invalid")
+        matched = observation.get("matched_character_id")
+        if matched is not None and (not isinstance(matched, str) or not re.fullmatch(r"CHAR-[0-9]{4}", matched)):
+            errors.append(f"{context}: matched_character_id is invalid")
+        obs_scene = observation.get("scene_id")
+        if obs_scene is not None and obs_scene not in scene_ids:
+            errors.append(f"{context}: references unknown scene")
+        obs_units = observation.get("source_unit_ids")
+        if not isinstance(obs_units, list) or not obs_units or any(unit_id not in source_texts for unit_id in obs_units):
+            errors.append(f"{context}: source_unit_ids are invalid")
+            obs_units = []
+        if obs_scene is not None and any(unit_id not in scene_units_by_id.get(obs_scene, set()) for unit_id in obs_units):
+            errors.append(f"{context}: source units are outside the referenced scene")
+        speaker_segments = observation.get("speaker_segment_ids")
+        if not isinstance(speaker_segments, list) or len(speaker_segments) != len(set(speaker_segments)) or any(segment_id not in segment_ids for segment_id in speaker_segments):
+            errors.append(f"{context}: speaker_segment_ids are invalid")
+            speaker_segments = []
+        has_dialogue = observation.get("has_dialogue")
+        if not isinstance(has_dialogue, bool) or (has_dialogue and not speaker_segments) or (not has_dialogue and speaker_segments):
+            errors.append(f"{context}: has_dialogue and speaker_segment_ids disagree")
+        for segment_id in speaker_segments:
+            observed_speaker_segment_counts[segment_id] = observed_speaker_segment_counts.get(segment_id, 0) + 1
+        if observation.get("status") not in STATUSES:
+            errors.append(f"{context}: status is invalid")
+        elif observation.get("status") in {"unknown", "conflict"}:
+            unresolved.append(f"{context} identity")
+        check_confidence(observation.get("confidence"), context, errors)
+        check_evidence(observation.get("evidence"), source_texts, context, errors)
+        for field in ("aliases", "chinese_aliases"):
+            values = observation.get(field)
+            if not isinstance(values, list) or len(values) != len(set(values)) or any(not isinstance(value, str) or not value.strip() for value in values):
+                errors.append(f"{context}: {field} is invalid")
+
+    required_speaker_segments = {
+        segment["segment_id"]
+        for unit in analyses
+        if isinstance(unit, dict)
+        for segment in unit.get("segments", [])
+        if isinstance(segment, dict) and segment.get("text_type") in TEXT_TYPES_WITH_SPEAKER and isinstance(segment.get("speaker"), dict) and segment["speaker"].get("kind") != "unknown"
+    }
+    observed_speaker_segments = set(observed_speaker_segment_counts)
+    if observed_speaker_segments != required_speaker_segments or any(count != 1 for count in observed_speaker_segment_counts.values()):
+        missing = sorted(required_speaker_segments - observed_speaker_segments)
+        extra = sorted(observed_speaker_segments - required_speaker_segments)
+        duplicates = sorted(segment_id for segment_id, count in observed_speaker_segment_counts.items() if count > 1)
+        if missing:
+            errors.append("identified speaker segments missing character observations: " + ", ".join(missing))
+        if extra:
+            errors.append("character observations reference non-identified speaker segments: " + ", ".join(extra))
+        if duplicates:
+            errors.append("identified speaker segments belong to multiple character observations: " + ", ".join(duplicates))
+
     review = analysis.get("review")
     if not isinstance(review, dict):
         errors.append("review is not an object")
@@ -323,6 +403,7 @@ def validate_analysis(project_dir: Path, chapter_id: str) -> list[str]:
                 or (scope_type == "beat" and scope_id in beat_ids)
                 or (scope_type == "source_unit" and scope_id in source_texts)
                 or (scope_type == "segment" and scope_id in segment_ids)
+                or (scope_type == "character_observation" and scope_id in observation_ids)
             )
             if not valid_scope:
                 errors.append(f"review issue {issue_index} has invalid scope {scope_type}:{scope_id}")

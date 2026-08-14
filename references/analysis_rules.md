@@ -76,3 +76,7 @@
 - 只有不存在未解决问题时才能使用 `review.status = ready`。
 - 存在待确认项时使用 `review.status = provisional`；只要结构、覆盖和证据合法，校验仍应通过。
 - 人工补充或修订不得覆盖本文件。按 `references/review_workflow.md` 追加验收事件并生成解析视图。
+
+## 7. 角色观察
+
+按 `references/entity_rules.md` 在同一次分析中生成 `character_observations`。所有已确认说话人的片段必须被角色观察引用；具名人物、关系角色和群众候选也要保存证据。优先匹配工作包中的精简角色登记上下文，避免跨章重复创建人物。后文真名、头衔或关系称谓与登记角色存在明确身份联系时填写 `matched_character_id`；即使当前 `entity_key` 曾获得其他 ID，也不要隐去该联系，统一登记层会生成待确认归并项。

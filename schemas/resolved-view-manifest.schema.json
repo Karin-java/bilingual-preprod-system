@@ -26,7 +26,7 @@
         "required": ["event_id", "scope_type", "scope_id", "note"],
         "properties": {
           "event_id": {"$ref": "common.schema.json#/$defs/reviewEventId"},
-          "scope_type": {"enum": ["chapter", "scene", "beat", "source_unit", "segment"]},
+          "scope_type": {"enum": ["chapter", "scene", "beat", "source_unit", "segment", "character_observation"]},
           "scope_id": {"type": "string", "minLength": 1},
           "note": {"type": "string", "minLength": 1}
         }

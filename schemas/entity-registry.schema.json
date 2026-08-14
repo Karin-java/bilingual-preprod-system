@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bilingual-preprod.local/schemas/entity-registry.schema.json",
+  "title": "Character and location registry bundle",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "registry_version", "analysis_inputs", "identity_event_log", "character_allocations", "character_key_index", "character_name_index", "character_id_redirects", "characters", "character_candidates", "identity_candidates", "location_allocations", "locations", "location_candidates"],
+  "properties": {
+    "schema_version": {"const": "2.0.0"},
+    "registry_version": {"const": "entity-registry-v2"},
+    "analysis_inputs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["chapter_id", "path", "sha256"],
+        "properties": {
+          "chapter_id": {"$ref": "common.schema.json#/$defs/chapterId"},
+          "path": {"type": "string", "minLength": 1},
+          "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+        }
+      }
+    },
+    "identity_event_log": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "active_event_ids", "retracted_event_ids"],
+      "properties": {
+        "path": {"const": "data/registries/character-identity.events.jsonl"},
+        "sha256": {"type": ["string", "null"], "pattern": "^[a-f0-9]{64}$"},
+        "active_event_ids": {"type": "array", "uniqueItems": true, "items": {"$ref": "common.schema.json#/$defs/characterIdentityEventId"}},
+        "retracted_event_ids": {"type": "array", "uniqueItems": true, "items": {"$ref": "common.schema.json#/$defs/characterIdentityEventId"}}
+      }
+    },
+    "character_allocations": {"type": "object", "additionalProperties": {"$ref": "common.schema.json#/$defs/characterId"}},
+    "character_key_index": {"type": "object", "additionalProperties": {"$ref": "common.schema.json#/$defs/characterId"}},
+    "character_name_index": {
+      "type": "object",
+      "additionalProperties": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "common.schema.json#/$defs/characterId"}}
+    },
+    "character_id_redirects": {"type": "object", "additionalProperties": {"$ref": "common.schema.json#/$defs/characterId"}},
+    "characters": {"type": "array", "items": {"$ref": "character.schema.json"}},
+    "character_candidates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["entity_key", "canonical_label", "chinese_label", "observation_ids", "chapter_ids", "reason"],
+        "properties": {
+          "entity_key": {"$ref": "common.schema.json#/$defs/entityKey"},
+          "canonical_label": {"type": "string", "minLength": 1},
+          "chinese_label": {"type": ["string", "null"]},
+          "observation_ids": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "common.schema.json#/$defs/characterObservationId"}},
+          "chapter_ids": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "common.schema.json#/$defs/chapterId"}},
+          "reason": {"enum": ["crowd_requires_recurrence", "identity_unresolved"]}
+        }
+      }
+    },
+    "identity_candidates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["candidate_id", "left_character_id", "right_character_id", "observation_ids", "chapter_ids", "reason", "evidence"],
+        "properties": {
+          "candidate_id": {"$ref": "common.schema.json#/$defs/characterIdentityCandidateId"},
+          "left_character_id": {"$ref": "common.schema.json#/$defs/characterId"},
+          "right_character_id": {"$ref": "common.schema.json#/$defs/characterId"},
+          "observation_ids": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "common.schema.json#/$defs/characterObservationId"}},
+          "chapter_ids": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "common.schema.json#/$defs/chapterId"}},
+          "reason": {"const": "matched_character_conflict"},
+          "evidence": {"type": "array", "minItems": 1, "items": {"$ref": "common.schema.json#/$defs/evidence"}}
+        }
+      }
+    },
+    "location_allocations": {"type": "object", "additionalProperties": {"$ref": "common.schema.json#/$defs/locationId"}},
+    "locations": {"type": "array", "items": {"$ref": "location.schema.json"}},
+    "location_candidates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["scene_id", "chapter_id", "source_text", "proposed_name", "status", "evidence"],
+        "properties": {
+          "scene_id": {"$ref": "common.schema.json#/$defs/sceneId"},
+          "chapter_id": {"$ref": "common.schema.json#/$defs/chapterId"},
+          "source_text": {"type": ["string", "null"]},
+          "proposed_name": {"type": ["string", "null"]},
+          "status": {"enum": ["conflict", "unknown"]},
+          "evidence": {"type": "array", "minItems": 1, "items": {"$ref": "common.schema.json#/$defs/evidence"}}
+        }
+      }
+    }
+  }
+}

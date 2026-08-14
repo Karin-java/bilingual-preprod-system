@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bilingual-preprod.local/schemas/character-identity-event.schema.json",
+  "title": "Append-only character identity event",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "event_id", "created_at", "actor", "operation", "note"],
+  "properties": {
+    "schema_version": {"const": "2.0.0"},
+    "event_id": {"$ref": "common.schema.json#/$defs/characterIdentityEventId"},
+    "created_at": {"type": "string", "format": "date-time"},
+    "actor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "label"],
+      "properties": {
+        "type": {"enum": ["user", "agent", "system"]},
+        "label": {"type": "string", "minLength": 1}
+      }
+    },
+    "operation": {"enum": ["merge_characters", "retract_event"]},
+    "source_character_id": {"$ref": "common.schema.json#/$defs/characterId"},
+    "target_character_id": {"$ref": "common.schema.json#/$defs/characterId"},
+    "canonical_name": {"type": ["string", "null"], "minLength": 1},
+    "chinese_name": {"type": ["string", "null"], "minLength": 1},
+    "aliases": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "chinese_aliases": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "source_observation_ids": {"type": "array", "uniqueItems": true, "items": {"$ref": "common.schema.json#/$defs/characterObservationId"}},
+    "target_event_id": {"$ref": "common.schema.json#/$defs/characterIdentityEventId"},
+    "note": {"type": "string", "minLength": 1}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"operation": {"const": "merge_characters"}}},
+      "then": {"required": ["source_character_id", "target_character_id", "canonical_name", "chinese_name", "aliases", "chinese_aliases", "source_observation_ids"]}
+    },
+    {
+      "if": {"properties": {"operation": {"const": "retract_event"}}},
+      "then": {"required": ["target_event_id"]}
+    }
+  ]
+}

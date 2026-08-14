@@ -4,16 +4,21 @@
   "title": "Character registry record",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "character_id", "canonical_name", "chinese_name", "aliases", "character_type", "importance", "evidence"],
+  "required": ["schema_version", "character_id", "entity_keys", "canonical_name", "chinese_name", "aliases", "chinese_aliases", "character_type", "importance", "first_observation_id", "observation_ids", "chapter_ids", "identity_event_ids", "evidence"],
   "properties": {
     "schema_version": {"const": "2.0.0"},
     "character_id": {"$ref": "common.schema.json#/$defs/characterId"},
+    "entity_keys": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "common.schema.json#/$defs/entityKey"}},
     "canonical_name": {"type": "string", "minLength": 1},
     "chinese_name": {"type": ["string", "null"]},
     "aliases": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "chinese_aliases": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
     "character_type": {"enum": ["named", "role", "crowd", "unknown"]},
     "importance": {"enum": ["major", "candidate_major", "supporting", "minor", "unknown"]},
-    "first_appearance_id": {"type": ["string", "null"], "pattern": "^APP-P[0-9]{2,}-[0-9]{4}$"},
-    "evidence": {"type": "array", "items": {"$ref": "common.schema.json#/$defs/evidence"}}
+    "first_observation_id": {"$ref": "common.schema.json#/$defs/characterObservationId"},
+    "observation_ids": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "common.schema.json#/$defs/characterObservationId"}},
+    "chapter_ids": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "common.schema.json#/$defs/chapterId"}},
+    "identity_event_ids": {"type": "array", "uniqueItems": true, "items": {"$ref": "common.schema.json#/$defs/characterIdentityEventId"}},
+    "evidence": {"type": "array", "minItems": 1, "items": {"$ref": "common.schema.json#/$defs/evidence"}}
   }
 }

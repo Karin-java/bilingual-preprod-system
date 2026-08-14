@@ -26,14 +26,14 @@ project/
 │   ├── views/analysis/p01.resolved.json
 │   ├── views/analysis/p01.resolved.manifest.json
 │   ├── render/p01.render-manifest.json
-│   ├── registries/characters.json
-│   ├── registries/locations.json
+│   ├── registries/entities.json
 │   ├── registries/terminology.json
 │   ├── appearances.jsonl
 │   └── profiles.json
 ├── work/
 │   ├── analysis/p01.packet.json
-│   └── review/p01.review.md
+│   ├── review/p01.review.md
+│   └── registry/entities.md
 ├── deliverables/
 │   ├── scripts_bilingual/p01.md
 │   ├── 全角色章节出镜表.csv
@@ -55,6 +55,9 @@ project/
 - `review-event.schema.json`：针对章、Scene、Beat、原文单元或片段的只追加人工验收事件。
 - `resolved-view-manifest.schema.json`：基础分析、事件日志和当前解析视图之间的哈希及依赖关系。
 - `render-manifest.schema.json`：当前解析视图与双语 Markdown、验收清单之间的哈希及依赖关系。
+- `character.schema.json` / `location.schema.json`：具有稳定 ID、别名、章节/场景链接和证据的实体记录。
+- `entity-registry.schema.json`：统一角色、多名称索引、旧 ID 重定向、同一角色候选、群众候选、地点及永久 ID 分配映射。
+- `character-identity-event.schema.json`：可追加、可撤销的角色身份归并决定。
 - `project.schema.json`：项目状态及已登记产物。
 - `source-manifest.schema.json`：原始文件、正文基线、拆章范围和指纹。
 - `character.schema.json`：全局角色、别名、角色类型及首次出镜。
@@ -77,7 +80,7 @@ JSONL 文件每行必须是一个完整 JSON 对象，并独立符合相应 Sche
 | 地点 | `LOC-{NNNN}` | `LOC-0001` |
 | 出镜记录 | `APP-{chapter}-{NNNN}` | `APP-P01-0001` |
 
-编号依据源顺序或首次确认顺序生成。修正名称、译文或人物属性时不得更换 ID。
+编号依据源顺序或首次确认顺序生成。修正名称、译文或人物属性时不得更换 ID。两个既有角色确认属于同一人时，保留首次分配记录，并让旧 ID、概念键和全部名称索引解析到统一角色；下游不得直接以显示名称作为主键。
 `P00` 专用于第一个章节标题之前确实存在的前置文本；正文首章从 `P01` 开始。超过 99 章后自然扩展为 `P100`。
 
 ### 原文基线

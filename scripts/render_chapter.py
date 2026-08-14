@@ -169,6 +169,8 @@ def objects_by_scope(analysis: dict[str, Any]) -> dict[tuple[str, str], dict[str
         result[("scene", scene["scene_id"])] = scene
         for beat in scene["beats"]:
             result[("beat", beat["beat_id"])] = beat
+    for observation in analysis["character_observations"]:
+        result[("character_observation", observation["observation_id"])] = observation
     return result
 
 
@@ -188,6 +190,8 @@ def issue_evidence(issue: dict[str, Any], target: dict[str, Any]) -> list[dict[s
         if isinstance(container, dict):
             return container.get("evidence", [])
         return target.get("classification", {}).get("evidence", [])
+    if issue["scope_type"] == "character_observation":
+        return target.get("evidence", [])
     return []
 
 

@@ -21,7 +21,7 @@ description: 解说剧全流程前筹系统：无损拆分英文原始剧本，�
 1. **无损接收**：保存原始文件、拆分章节、生成稳定段落 ID 和 SHA-256 指纹。
 2. **逐章结构化**：识别叙述、动作、对白、心理和特殊文本，生成中英一一对应记录。
 3. **场景分析**：建立生产场景和场内 Beat，所有边界引用原文单元 ID。
-4. **实体沉淀**：增量维护角色、别名、地点和术语；不要为每章重新建立全局信息。
+4. **实体沉淀**：增量维护统一角色、多名称索引、旧 ID 重定向、地点和术语；不要为每章重新建立全局信息。
 5. **出镜统计**：记录具名角色、有台词角色、稳定身份角色和群众角色的出镜或被提及状态。
 6. **人物档案**：提取年龄、性别、种族、身份、外貌、发型、体型、特殊标记、服装和性格，并区分明确、推断、冲突和未知。
 7. **确定性渲染**：从事实层生成中英标准剧本、全角色章节出镜表、主要角色场景统计和人物档案。
@@ -63,6 +63,15 @@ python scripts/validate_analysis.py <project> --chapter P01
 python scripts/review_analysis.py materialize <project> --chapter P01
 python scripts/render_chapter.py <project> --chapter P01
 python scripts/validate_render.py <project> --chapter P01
+python scripts/build_registries.py <project>
+python scripts/validate_registries.py <project>
+```
+
+后文确认两个角色记录属于同一人时，通过通用身份事件归并；不要重写早期章节：
+
+```text
+python scripts/manage_character_identities.py merge <project> --source CHAR-0008 --target CHAR-0002 --canonical-name Viktor --chinese-name 维克托 --note <evidence-or-user-confirmation>
+python scripts/manage_character_identities.py retract <project> --event IDENT-000001 --note <reason>
 ```
 
 结构与证据通过即可继续；`provisional` 表示仍有待确认项，不是校验失败。人工验收时读取 `references/review_workflow.md`，追加精准修订并物化当前视图：
@@ -89,5 +98,9 @@ python scripts/review_analysis.py retract <project> --chapter P01 --event REV-P0
 - `scripts/review_analysis.py`：追加验收事件并确定性重建当前章节解析视图。
 - `scripts/render_chapter.py`：从当前解析视图生成唯一的中英 Markdown 剧本和双语验收清单，不调用模型。
 - `scripts/validate_render.py`：校验英文原文、中文译文、Scene、Beat、待确认线索和输出哈希。
+- `references/entity_rules.md`：具名人物、有台词角色、身份角色、群众候选、统一身份解析、别名匹配和地点登记规则。
+- `scripts/build_registries.py`：从所有当前解析视图和身份事件确定性重建统一角色、多名称索引和地点登记表。
+- `scripts/manage_character_identities.py`：追加或撤销角色归并决定，不回写章节分析。
+- `scripts/validate_registries.py`：校验实体 ID、名称索引、旧 ID 重定向、跨章链接、候选项和人工查看版可重建性。
 
 每完成一个流水线阶段即运行对应校验。失败时只返修受影响的章节、场景或记录，不重跑已通过的全量数据。

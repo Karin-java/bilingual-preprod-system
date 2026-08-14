@@ -4,7 +4,7 @@
   "title": "Chapter semantic analysis",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "analysis_method", "chapter_id", "source_sha256", "input_packet_sha256", "source_unit_ids", "unit_analyses", "scenes", "review"],
+  "required": ["schema_version", "analysis_method", "chapter_id", "source_sha256", "input_packet_sha256", "source_unit_ids", "unit_analyses", "scenes", "character_observations", "review"],
   "properties": {
     "schema_version": {"const": "2.0.0"},
     "analysis_method": {"const": "agent-semantic-v1"},
@@ -25,6 +25,7 @@
       }
     },
     "scenes": {"type": "array", "items": {"$ref": "#/$defs/scene"}},
+    "character_observations": {"type": "array", "items": {"$ref": "#/$defs/characterObservation"}},
     "review": {
       "type": "object",
       "additionalProperties": false,
@@ -39,7 +40,7 @@
             "required": ["issue_id", "scope_type", "scope_id", "field_path", "code", "message", "source_unit_ids"],
             "properties": {
               "issue_id": {"$ref": "common.schema.json#/$defs/reviewIssueId"},
-              "scope_type": {"enum": ["chapter", "scene", "beat", "source_unit", "segment"]},
+              "scope_type": {"enum": ["chapter", "scene", "beat", "source_unit", "segment", "character_observation"]},
               "scope_id": {"type": "string", "minLength": 1},
               "field_path": {"type": ["string", "null"], "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*$"},
               "code": {"type": "string", "pattern": "^[a-z][a-z0-9_]+$"},
@@ -52,6 +53,30 @@
     }
   },
   "$defs": {
+    "characterObservation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["observation_id", "entity_key", "matched_character_id", "canonical_label", "chinese_label", "aliases", "chinese_aliases", "character_type", "importance_hint", "scene_id", "presence_type", "has_dialogue", "speaker_segment_ids", "source_unit_ids", "status", "confidence", "evidence"],
+      "properties": {
+        "observation_id": {"$ref": "common.schema.json#/$defs/characterObservationId"},
+        "entity_key": {"$ref": "common.schema.json#/$defs/entityKey"},
+        "matched_character_id": {"anyOf": [{"$ref": "common.schema.json#/$defs/characterId"}, {"type": "null"}]},
+        "canonical_label": {"type": "string", "minLength": 1},
+        "chinese_label": {"type": ["string", "null"]},
+        "aliases": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+        "chinese_aliases": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+        "character_type": {"enum": ["named", "role", "crowd"]},
+        "importance_hint": {"enum": ["candidate_major", "supporting", "minor", "unknown"]},
+        "scene_id": {"anyOf": [{"$ref": "common.schema.json#/$defs/sceneId"}, {"type": "null"}]},
+        "presence_type": {"enum": ["physical", "dream", "flashback", "mentioned", "unknown"]},
+        "has_dialogue": {"type": "boolean"},
+        "speaker_segment_ids": {"type": "array", "uniqueItems": true, "items": {"$ref": "common.schema.json#/$defs/segmentId"}},
+        "source_unit_ids": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "common.schema.json#/$defs/sourceUnitId"}},
+        "status": {"$ref": "common.schema.json#/$defs/assessmentStatus"},
+        "confidence": {"$ref": "common.schema.json#/$defs/confidence"},
+        "evidence": {"type": "array", "minItems": 1, "items": {"$ref": "common.schema.json#/$defs/evidence"}}
+      }
+    },
     "assessment": {
       "type": "object",
       "additionalProperties": false,

@@ -14,6 +14,49 @@ def json_bytes(value: object) -> bytes:
     return (json.dumps(value, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
 
 
+def registry_context(project_dir: Path, units: list[dict], chapter_id: str) -> dict:
+    registry_path = project_dir / "data" / "registries" / "entities.json"
+    if not registry_path.exists():
+        return {"registry_version": None, "registry_sha256": None, "selection_strategy": "lexical-major-recent-v1", "total_characters": 0, "total_locations": 0, "characters": [], "locations": []}
+    data = registry_path.read_bytes()
+    registry = json.loads(data.decode("utf-8"))
+    source = "\n".join(unit["source_text"] for unit in units).casefold()
+    current_number = int(chapter_id[1:])
+    prior_numbers = sorted({int(value[1:]) for item in registry["characters"] for value in item["chapter_ids"] if int(value[1:]) < current_number})
+    recent_chapter = f"P{prior_numbers[-1]:02d}" if prior_numbers else None
+    ignored_terms = {"i", "he", "she", "him", "her", "they", "them", "his", "their"}
+
+    def source_matches(values: list[str]) -> bool:
+        return any(value.casefold() not in ignored_terms and len(value.strip()) > 1 and value.casefold() in source for value in values)
+
+    selected_characters = [
+        item for item in registry["characters"]
+        if item["importance"] == "candidate_major"
+        or (recent_chapter is not None and recent_chapter in item["chapter_ids"])
+        or source_matches([item["canonical_name"], *item["aliases"]])
+    ]
+    selected_locations = [
+        item for item in registry["locations"]
+        if (recent_chapter is not None and recent_chapter in item["chapter_ids"])
+        or source_matches([item["canonical_name"], *item["aliases"]])
+    ]
+    return {
+        "registry_version": registry["registry_version"],
+        "registry_sha256": hashlib.sha256(data).hexdigest(),
+        "selection_strategy": "lexical-major-recent-v1",
+        "total_characters": len(registry["characters"]),
+        "total_locations": len(registry["locations"]),
+        "characters": [
+            {key: item[key] for key in ("character_id", "entity_keys", "canonical_name", "chinese_name", "aliases", "chinese_aliases")}
+            for item in selected_characters
+        ],
+        "locations": [
+            {key: item[key] for key in ("location_id", "entity_keys", "canonical_name", "aliases", "parent_names", "sub_locations")}
+            for item in selected_locations
+        ],
+    }
+
+
 def prepare_packet(project_dir: Path, chapter_id: str, replace: bool = False) -> tuple[Path, str]:
     project_dir = project_dir.resolve()
     errors = validate_project(project_dir)
@@ -29,7 +72,7 @@ def prepare_packet(project_dir: Path, chapter_id: str, replace: bool = False) ->
     units = [json.loads(line) for line in unit_lines]
     basename = chapter_id.lower()
     packet = {
-        "packet_version": "1.0.0",
+        "packet_version": "1.1.0",
         "project_id": project["project_id"],
         "chapter_id": chapter_id,
         "source_sha256": chapter["sha256"],
@@ -37,6 +80,7 @@ def prepare_packet(project_dir: Path, chapter_id: str, replace: bool = False) ->
         "rules_ref": "references/analysis_rules.md",
         "output_schema_ref": "schemas/chapter-analysis.schema.json",
         "output_path": f"data/analysis/{basename}.analysis.json",
+        "registry_context": registry_context(project_dir, units, chapter_id),
         "units": [{"unit_id": unit["unit_id"], "source_text": unit["source_text"]} for unit in units],
     }
     data = json_bytes(packet)
