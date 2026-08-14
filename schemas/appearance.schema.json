@@ -4,16 +4,21 @@
   "title": "Character appearance",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "appearance_id", "character_id", "chapter_id", "scene_id", "appearance_type", "has_dialogue", "source_unit_ids", "evidence"],
+  "required": ["schema_version", "appearance_id", "source_observation_id", "character_id", "chapter_id", "scene_id", "appearance_type", "has_dialogue", "speaker_segment_ids", "summary_zh", "source_unit_ids", "status", "confidence", "evidence"],
   "properties": {
     "schema_version": {"const": "2.0.0"},
     "appearance_id": {"type": "string", "pattern": "^APP-P[0-9]{2,}-[0-9]{4}$"},
+    "source_observation_id": {"$ref": "common.schema.json#/$defs/characterObservationId"},
     "character_id": {"$ref": "common.schema.json#/$defs/characterId"},
     "chapter_id": {"$ref": "common.schema.json#/$defs/chapterId"},
     "scene_id": {"anyOf": [{"$ref": "common.schema.json#/$defs/sceneId"}, {"type": "null"}]},
     "appearance_type": {"enum": ["physical", "dialogue", "flashback", "dream", "mentioned", "unknown"]},
     "has_dialogue": {"type": "boolean"},
+    "speaker_segment_ids": {"type": "array", "uniqueItems": true, "items": {"$ref": "common.schema.json#/$defs/segmentId"}},
+    "summary_zh": {"type": "string", "minLength": 1},
     "source_unit_ids": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "common.schema.json#/$defs/sourceUnitId"}},
+    "status": {"$ref": "common.schema.json#/$defs/assessmentStatus"},
+    "confidence": {"$ref": "common.schema.json#/$defs/confidence"},
     "evidence": {"type": "array", "minItems": 1, "items": {"$ref": "common.schema.json#/$defs/evidence"}}
   }
 }

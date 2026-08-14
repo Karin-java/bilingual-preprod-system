@@ -12,12 +12,14 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from ingest_source import ingest_source  # noqa: E402
+from build_appearance_reports import build_appearance_reports, render_chapter_table  # noqa: E402
 from build_registries import build_registries, resolve_character_reference  # noqa: E402
 from manage_character_identities import append_identity_event  # noqa: E402
 from prepare_analysis import prepare_packet  # noqa: E402
 from render_chapter import render_chapter  # noqa: E402
 from review_analysis import append_event, materialize  # noqa: E402
 from validate_analysis import validate_analysis  # noqa: E402
+from validate_appearance_reports import validate_appearance_reports  # noqa: E402
 from validate_render import validate_render  # noqa: E402
 from validate_registries import validate_registries  # noqa: E402
 
@@ -140,6 +142,7 @@ class AnalysisTests(unittest.TestCase):
                     "chinese_label": "薇奥莱特",
                     "aliases": [],
                     "chinese_aliases": [],
+                    "summary_zh": "薇奥莱特进入书房并向国王行礼。",
                     "character_type": "named",
                     "importance_hint": "candidate_major",
                     "scene_id": "P01-S001",
@@ -159,6 +162,7 @@ class AnalysisTests(unittest.TestCase):
                     "chinese_label": "国王",
                     "aliases": ["the king", "my King"],
                     "chinese_aliases": [],
+                    "summary_zh": "国王在书房接受薇奥莱特的行礼。",
                     "character_type": "role",
                     "importance_hint": "candidate_major",
                     "scene_id": "P01-S001",
@@ -467,7 +471,7 @@ class AnalysisTests(unittest.TestCase):
         self.assertEqual([item["character_id"] for item in context["characters"]], ["CHAR-0001", "CHAR-0002"])
         self.assertEqual(context["locations"][0]["location_id"], "LOC-0001")
 
-    def add_king_viktor_observation(self, matched_character_id=None) -> None:
+    def add_king_viktor_observation(self, matched_character_id=None, presence_type="mentioned") -> None:
         changed = copy.deepcopy(self.analysis)
         observation = {
             "observation_id": "COBS-P01-0003",
@@ -477,10 +481,11 @@ class AnalysisTests(unittest.TestCase):
             "chinese_label": "维克托国王",
             "aliases": ["Viktor"],
             "chinese_aliases": ["维克托"],
+            "summary_zh": "维克托国王在书房中出现。",
             "character_type": "named",
             "importance_hint": "candidate_major",
             "scene_id": "P01-S001",
-            "presence_type": "mentioned",
+            "presence_type": presence_type,
             "has_dialogue": False,
             "speaker_segment_ids": [],
             "source_unit_ids": ["P01-U0004"],
@@ -575,6 +580,63 @@ class AnalysisTests(unittest.TestCase):
         result = resolve_character_reference(registry, "King")
         self.assertEqual(result["status"], "ambiguous")
         self.assertEqual(result["character_ids"], ["CHAR-0002", "CHAR-0003"])
+
+    def test_appearance_reports_are_stable_readable_and_markdown_only(self) -> None:
+        build_registries(self.project)
+        data_path, chapter_path, major_path, bundle = build_appearance_reports(self.project)
+        first = (data_path.read_bytes(), chapter_path.read_bytes(), major_path.read_bytes())
+        self.assertEqual(len(bundle["appearances"]), 2)
+        self.assertEqual(len(bundle["chapter_rows"]), 2)
+        self.assertEqual(len(bundle["major_character_scenes"]), 2)
+        chapter = chapter_path.read_text(encoding="utf-8")
+        major = major_path.read_text(encoding="utf-8")
+        self.assertIn("| 角色 | P01 |", chapter)
+        self.assertIn("| Violette / 薇奥莱特 | 现实：场1；台词：场1 |", chapter)
+        self.assertNotIn("| 角色 | 章节 |", chapter)
+        self.assertIn("## 国王 / King", major)
+        self.assertIn("**基本信息**：主要角色候选；详细身份待完整剧本复盘补充", major)
+        self.assertIn("| 出场章节 | 出场场景（原文位置） | 时间 | 备注 |", major)
+        self.assertIn("| P01 | 国王的书房 | 夜·内 |", major)
+        self.assertIn("国王在书房接受薇奥莱特的行礼。", major)
+        self.assertFalse(any(self.project.rglob("*.docx")))
+        build_appearance_reports(self.project)
+        self.assertEqual((data_path.read_bytes(), chapter_path.read_bytes(), major_path.read_bytes()), first)
+        self.assertEqual(validate_appearance_reports(self.project), [])
+
+    def test_chapter_appearance_deliverable_is_character_by_chapter_matrix(self) -> None:
+        _, _, registry = build_registries(self.project)
+        _, _, _, bundle = build_appearance_reports(self.project)
+        bundle = copy.deepcopy(bundle)
+        bundle["analysis_inputs"].append({"chapter_id": "P03", "path": "data/analysis/p03.analysis.json", "sha256": "0" * 64})
+        scene_by_id = {scene["scene_id"]: scene for scene in self.analysis["scenes"]}
+        matrix = render_chapter_table(bundle, registry, scene_by_id)
+        self.assertIn("| 角色 | P01 | P03 |", matrix)
+        self.assertEqual(matrix.count("| Violette / 薇奥莱特 |"), 1)
+        self.assertIn("| Violette / 薇奥莱特 | 现实：场1；台词：场1 | — |", matrix)
+        self.assertEqual(matrix.count("| King / 国王 |"), 1)
+
+    def test_merged_alias_observations_count_as_one_major_scene(self) -> None:
+        self.add_king_viktor_observation(presence_type="physical")
+        build_registries(self.project)
+        append_identity_event(self.project, {
+            "operation": "merge_characters", "source_character_id": "CHAR-0003", "target_character_id": "CHAR-0002",
+            "canonical_name": "Viktor", "chinese_name": "维克托", "note": "确认国王与 Viktor 是同一角色",
+        })
+        _, chapter_path, major_path, bundle = build_appearance_reports(self.project)
+        viktor_rows = [item for item in bundle["major_character_scenes"] if item["character_id"] == "CHAR-0002"]
+        self.assertEqual(len(viktor_rows), 1)
+        self.assertEqual(viktor_rows[0]["appearance_ids"], ["APP-P01-0002", "APP-P01-0003"])
+        self.assertEqual(chapter_path.read_text(encoding="utf-8").count("| Viktor / 维克托 |"), 1)
+        major = major_path.read_text(encoding="utf-8")
+        self.assertEqual(major.count("## 维克托 / Viktor"), 1)
+        self.assertEqual(major.count("| 出场章节 | 出场场景（原文位置） | 时间 | 备注 |"), 2)
+        self.assertEqual(major.count("| P01 | 国王的书房 | 夜·内 |"), 2)
+        self.assertEqual(validate_appearance_reports(self.project), [])
+
+    def test_appearance_report_tampering_is_detected(self) -> None:
+        _, chapter_path, _, _ = build_appearance_reports(self.project)
+        chapter_path.write_text("tampered\n", encoding="utf-8")
+        self.assertTrue(any("chapter Markdown" in error for error in validate_appearance_reports(self.project)))
 
 
 if __name__ == "__main__":

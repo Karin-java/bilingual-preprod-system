@@ -65,6 +65,8 @@ python scripts/render_chapter.py <project> --chapter P01
 python scripts/validate_render.py <project> --chapter P01
 python scripts/build_registries.py <project>
 python scripts/validate_registries.py <project>
+python scripts/build_appearance_reports.py <project>
+python scripts/validate_appearance_reports.py <project>
 ```
 
 后文确认两个角色记录属于同一人时，通过通用身份事件归并；不要重写早期章节：
@@ -102,5 +104,8 @@ python scripts/review_analysis.py retract <project> --chapter P01 --event REV-P0
 - `scripts/build_registries.py`：从所有当前解析视图和身份事件确定性重建统一角色、多名称索引和地点登记表。
 - `scripts/manage_character_identities.py`：追加或撤销角色归并决定，不回写章节分析。
 - `scripts/validate_registries.py`：校验实体 ID、名称索引、旧 ID 重定向、跨章链接、候选项和人工查看版可重建性。
+- `references/appearance_rules.md`：全角色章节对应矩阵、每个主要角色独立出镜表、实际出镜、梦境/回忆、仅被提及和统一身份去重规则。
+- `scripts/build_appearance_reports.py`：生成机器出镜事实、角色为行且 P章节为列的出镜矩阵，以及主要角色场景统计 Markdown。
+- `scripts/validate_appearance_reports.py`：校验稳定出镜 ID、统一角色去重、场景摘要和两份 Markdown 的可重建性。
 
 每完成一个流水线阶段即运行对应校验。失败时只返修受影响的章节、场景或记录，不重跑已通过的全量数据。

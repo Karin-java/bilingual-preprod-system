@@ -43,7 +43,7 @@ SEGMENT_FIELDS = {
 }
 OBSERVATION_FIELDS = {
     "entity_key", "matched_character_id", "canonical_label", "chinese_label", "aliases",
-    "chinese_aliases", "character_type", "importance_hint", "presence_type",
+    "chinese_aliases", "summary_zh", "character_type", "importance_hint", "presence_type",
 }
 ALLOWED_FIELDS = {"scene": SCENE_FIELDS, "beat": BEAT_FIELDS, "segment": SEGMENT_FIELDS, "character_observation": OBSERVATION_FIELDS}
 

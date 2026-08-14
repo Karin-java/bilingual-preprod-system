@@ -65,6 +65,7 @@
         "chinese_label": {"type": ["string", "null"]},
         "aliases": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
         "chinese_aliases": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+        "summary_zh": {"type": "string", "minLength": 1},
         "character_type": {"enum": ["named", "role", "crowd"]},
         "importance_hint": {"enum": ["candidate_major", "supporting", "minor", "unknown"]},
         "scene_id": {"anyOf": [{"$ref": "common.schema.json#/$defs/sceneId"}, {"type": "null"}]},

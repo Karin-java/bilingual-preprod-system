@@ -3,7 +3,7 @@
 ## 1. 设计原则
 
 - 将 `source/` 作为只读事实源；任何翻译、分析或渲染均不得覆盖原文。
-- 将 JSON/JSONL 作为事实层，将 Markdown/CSV/报告/提示词作为可重建的派生产物。
+- 将 JSON/JSONL 作为事实层，将 Markdown、报告和提示词作为可重建的派生产物。
 - 为章节、原文单元、场景、节拍和角色使用稳定 ID；已发布 ID 不得因重跑而改变。
 - 为模型产生的结论保存证据、判断状态和置信度；未知信息使用 `unknown`，不得猜测。
 - 使用 `schema_version` 管理兼容性。补充可选字段为次版本升级；删除、改名或改变语义为主版本升级。
@@ -28,7 +28,7 @@ project/
 │   ├── render/p01.render-manifest.json
 │   ├── registries/entities.json
 │   ├── registries/terminology.json
-│   ├── appearances.jsonl
+│   ├── appearances/appearances.json
 │   └── profiles.json
 ├── work/
 │   ├── analysis/p01.packet.json
@@ -36,7 +36,7 @@ project/
 │   └── registry/entities.md
 ├── deliverables/
 │   ├── scripts_bilingual/p01.md
-│   ├── 全角色章节出镜表.csv
+│   ├── 全角色章节出镜表.md
 │   ├── 主要角色场景统计.md
 │   └── 角色基础信息档案.md
 └── extensions/
@@ -62,6 +62,7 @@ project/
 - `source-manifest.schema.json`：原始文件、正文基线、拆章范围和指纹。
 - `character.schema.json`：全局角色、别名、角色类型及首次出镜。
 - `appearance.schema.json`：角色的一次出镜或被提及记录。
+- `appearance-bundle.schema.json`：出镜事实、角色章节聚合和主要角色场景聚合的可重建机器数据。
 - `character-profile.schema.json`：人物参数、证据、明确/推断/冲突/未知状态。
 - `extension-manifest.schema.json`：报告、美术提示词等扩展模块的输入输出声明。
 
@@ -112,6 +113,7 @@ JSONL 文件每行必须是一个完整 JSON 对象，并独立符合相应 Sche
 
 - 默认只生成清洗后的 Markdown，不同时复制一份 DOCX。
 - `deliverables/scripts_bilingual/pNN.md` 是单章中英标准剧本；`work/review/pNN.review.md` 是过程验收文件，不属于重复交付件。
+- `deliverables/全角色章节出镜表.md` 使用“角色为行、P 编号章节为列”的对应矩阵；`deliverables/主要角色场景统计.md` 按“一个主要角色一个独立小节和表格”承载其基本信息、具体场景、时间与角色级情节备注，不生成同内容的 CSV 副本。
 - 用户明确选择某一个 Markdown 文件时，才对该文件执行确定性 DOCX 转换，并保存源文件哈希；转换不得再次调用模型。
 
 ## 6. 场景与 Beat
@@ -146,4 +148,4 @@ JSONL 文件每行必须是一个完整 JSON 对象，并独立符合相应 Sche
 - 示例 ID、枚举和字段约束可由标准 JSON Schema Draft 2020-12 校验器读取。
 - 核心记录均能通过稳定 ID 相互引用。
 - 扩展模块无需修改核心 Schema 即可新增。
-- Markdown、CSV、报告和提示词删除后，可从事实层重新生成。
+- Markdown、报告和提示词删除后，可从事实层重新生成。
