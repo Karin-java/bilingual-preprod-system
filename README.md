@@ -1,0 +1,2 @@
+# bilingual-preprod-system
+这是AI解说漫的前期筹备工作自动化Agent，目的是完成从剧本到美术资产提示词的全部流程
