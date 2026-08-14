@@ -30,6 +30,8 @@ class IngestSourceTests(unittest.TestCase):
             self.assertEqual(validate_project(project), [])
             manifest = json.loads((project / "source/manifest.json").read_text(encoding="utf-8"))
             self.assertEqual([c["chapter_id"] for c in manifest["chapters"]], ["P00", "P01", "P02"])
+            first_unit = json.loads((project / manifest["chapters"][0]["units_path"]).read_text(encoding="utf-8").splitlines()[0])
+            self.assertEqual(set(first_unit), {"schema_version", "unit_id", "chapter_id", "ordinal", "source_text", "source_sha256"})
             self.assertEqual((project / "source/original.txt").read_bytes(), canonical.encode("utf-8"))
             rebuilt = b"".join((project / c["source_path"]).read_bytes() for c in manifest["chapters"])
             self.assertEqual(rebuilt, canonical.encode("utf-8"))
@@ -59,6 +61,17 @@ class IngestSourceTests(unittest.TestCase):
             manifest = json.loads((project / "source/manifest.json").read_text(encoding="utf-8"))
             self.assertEqual(manifest["chapter_detection"]["status"], "single_chapter_review")
             self.assertEqual(manifest["chapters"][0]["chapter_id"], "P01")
+            self.assertEqual(validate_project(project), [])
+
+    def test_isolated_source_chapter_keeps_its_number(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            source = root / "chapter3.txt"
+            source.write_bytes(b"Chapter 3: Yes, Master.\nText\n")
+            project = ingest_source(source, root / "project")
+            manifest = json.loads((project / "source/manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual(manifest["chapters"][0]["chapter_id"], "P03")
+            self.assertEqual(manifest["chapters"][0]["source_label"], "3")
             self.assertEqual(validate_project(project), [])
 
     def test_docx_body_has_explicit_canonical_baseline(self) -> None:

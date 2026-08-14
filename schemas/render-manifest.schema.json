@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bilingual-preprod.local/schemas/render-manifest.schema.json",
+  "title": "Deterministic bilingual Markdown render manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "renderer_version", "chapter_id", "analysis_path", "analysis_sha256", "source_sha256", "script_path", "script_sha256", "review_path", "review_sha256", "pending_issue_ids"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "renderer_version": {"const": "bilingual-markdown-v1"},
+    "chapter_id": {"$ref": "common.schema.json#/$defs/chapterId"},
+    "analysis_path": {"type": "string", "minLength": 1},
+    "analysis_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "source_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "script_path": {"type": "string", "minLength": 1},
+    "script_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "review_path": {"type": "string", "minLength": 1},
+    "review_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "pending_issue_ids": {"type": "array", "uniqueItems": true, "items": {"$ref": "common.schema.json#/$defs/reviewIssueId"}}
+  }
+}

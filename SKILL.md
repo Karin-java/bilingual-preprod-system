@@ -48,6 +48,33 @@ description: 解说剧全流程前筹系统：无损拆分英文原始剧本，�
 3. 将模块私有数据写入自己的命名空间。
 4. 保存输入哈希、模块版本和输出路径，使产物可追溯、可重建。
 
+## 当前执行入口
+
+```text
+python scripts/ingest_source.py <source> --project-dir <project>
+python scripts/validate_ingest.py <project>
+python scripts/prepare_analysis.py <project> --chapter P01
+```
+
+读取 `references/analysis_rules.md` 和生成的 `work/analysis/p01.packet.json`，将结构化结果写入工作包声明的 `output_path`，然后执行：
+
+```text
+python scripts/validate_analysis.py <project> --chapter P01
+python scripts/review_analysis.py materialize <project> --chapter P01
+python scripts/render_chapter.py <project> --chapter P01
+python scripts/validate_render.py <project> --chapter P01
+```
+
+结构与证据通过即可继续；`provisional` 表示仍有待确认项，不是校验失败。人工验收时读取 `references/review_workflow.md`，追加精准修订并物化当前视图：
+
+```text
+python scripts/review_analysis.py set <project> --chapter P01 --scope P01-S001 --field time_of_day.value --value-json '"night"' --note <reason> --resolve ISS-P01-0001
+python scripts/review_analysis.py note <project> --chapter P01 --scope P01 --note <supplement>
+python scripts/review_analysis.py retract <project> --chapter P01 --event REV-P01-000001 --note <reason>
+```
+
+只处理当前章节；校验通过前不要进入下一章或下游渲染。下游优先读取 `data/views/analysis/pNN.resolved.json`。
+
 ## 资源
 
 - `references/data_contract.md`：事实层、稳定 ID、证据链、目录和扩展契约。
@@ -55,5 +82,12 @@ description: 解说剧全流程前筹系统：无损拆分英文原始剧本，�
 - `scripts/validate_schemas.py`：校验 Schema 语法和本地引用。
 - `scripts/ingest_source.py`：无损接收 TXT、Markdown 或 DOCX，拆章并生成稳定原文单元。
 - `scripts/validate_ingest.py`：校验原文件、正文基线、章节和原文单元的指纹及重组完整性。
+- `references/analysis_rules.md`：文本片段、说话人、Scene、Beat、证据和人工复核规则。
+- `scripts/prepare_analysis.py`：为单个章节生成最小上下文分析工作包及输入哈希。
+- `scripts/validate_analysis.py`：校验字符覆盖、说话人、场景/Beat分区、证据和复核状态。
+- `references/review_workflow.md`：待确认项、精准人工修订、撤销和下游读取规则。
+- `scripts/review_analysis.py`：追加验收事件并确定性重建当前章节解析视图。
+- `scripts/render_chapter.py`：从当前解析视图生成唯一的中英 Markdown 剧本和双语验收清单，不调用模型。
+- `scripts/validate_render.py`：校验英文原文、中文译文、Scene、Beat、待确认线索和输出哈希。
 
 每完成一个流水线阶段即运行对应校验。失败时只返修受影响的章节、场景或记录，不重跑已通过的全量数据。

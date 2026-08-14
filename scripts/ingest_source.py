@@ -27,6 +27,57 @@ class Heading:
     start: int
     text: str
     label: str
+    chapter_number: int | None
+
+
+ONES = {
+    "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6,
+    "seven": 7, "eight": 8, "nine": 9, "ten": 10, "eleven": 11,
+    "twelve": 12, "thirteen": 13, "fourteen": 14, "fifteen": 15,
+    "sixteen": 16, "seventeen": 17, "eighteen": 18, "nineteen": 19,
+}
+TENS = {"twenty": 20, "thirty": 30, "forty": 40, "fifty": 50, "sixty": 60, "seventy": 70, "eighty": 80, "ninety": 90}
+
+
+def parse_roman(value: str) -> int | None:
+    values = {"I": 1, "V": 5, "X": 10, "L": 50, "C": 100, "D": 500, "M": 1000}
+    upper = value.upper()
+    total = 0
+    previous = 0
+    for char in reversed(upper):
+        current = values.get(char)
+        if current is None:
+            return None
+        total += -current if current < previous else current
+        previous = max(previous, current)
+    numerals = [
+        (1000, "M"), (900, "CM"), (500, "D"), (400, "CD"), (100, "C"),
+        (90, "XC"), (50, "L"), (40, "XL"), (10, "X"), (9, "IX"),
+        (5, "V"), (4, "IV"), (1, "I"),
+    ]
+    remainder = total
+    canonical = ""
+    for number, numeral in numerals:
+        while remainder >= number:
+            canonical += numeral
+            remainder -= number
+    return total if total > 0 and canonical == upper else None
+
+
+def parse_chapter_number(label: str) -> int | None:
+    lowered = label.lower()
+    if lowered.isdigit():
+        value = int(lowered)
+        return value if value > 0 else None
+    roman = parse_roman(label)
+    if roman is not None:
+        return roman
+    words = lowered.replace("-", " ").split()
+    if len(words) == 1:
+        return ONES.get(words[0], TENS.get(words[0]))
+    if len(words) == 2 and words[0] in TENS and words[1] in ONES and ONES[words[1]] < 10:
+        return TENS[words[0]] + ONES[words[1]]
+    return None
 
 
 def sha256_bytes(value: bytes) -> str:
@@ -106,9 +157,13 @@ def find_headings(text: str) -> list[Heading]:
     offset = 0
     for line in text.splitlines(keepends=True):
         candidate = line.rstrip("\r\n")
-        match = SPECIAL_RE.fullmatch(candidate) or CHAPTER_RE.fullmatch(candidate)
-        if match:
-            headings.append(Heading(offset, candidate.strip(), match.group("label")))
+        special = SPECIAL_RE.fullmatch(candidate)
+        chapter = CHAPTER_RE.fullmatch(candidate)
+        if special:
+            headings.append(Heading(offset, candidate.strip(), special.group("label").lower(), None))
+        elif chapter:
+            label = chapter.group("label")
+            headings.append(Heading(offset, candidate.strip(), label, parse_chapter_number(label)))
         offset += len(line)
     return headings
 
@@ -122,14 +177,32 @@ def split_chapters(text: str) -> tuple[list[dict[str, object]], str, list[str]]:
         spans.append((0, len(text), None, None, 1))
         status = "single_chapter_review"
     else:
-        if headings[0].start > 0:
+        first_is_prologue = headings[0].label == "prologue"
+        if headings[0].start > 0 and not first_is_prologue:
             spans.append((0, headings[0].start, None, "preamble", 0))
             status = "detected_with_preamble"
         else:
             status = "detected"
+        numeric_values = [heading.chapter_number for heading in headings if heading.chapter_number is not None]
+        epilogue_number = (max(numeric_values) + 1) if numeric_values else 1
+        used_numbers = {0} if spans else set()
         for index, heading in enumerate(headings):
             end = headings[index + 1].start if index + 1 < len(headings) else len(text)
-            spans.append((heading.start, end, heading.text, heading.label, index + 1))
+            start = 0 if index == 0 and first_is_prologue else heading.start
+            if heading.chapter_number is not None:
+                desired = heading.chapter_number
+            elif heading.label == "prologue":
+                desired = 0
+            else:
+                desired = epilogue_number
+            if desired in used_numbers:
+                fallback = 1
+                while fallback in used_numbers:
+                    fallback += 1
+                warnings.append(f"Duplicate or conflicting chapter number {desired} at '{heading.text}'; assigned P{fallback:02d} for review.")
+                desired = fallback
+            used_numbers.add(desired)
+            spans.append((start, end, heading.text, heading.label, desired))
 
     chapters: list[dict[str, object]] = []
     for start, end, heading, label, ordinal in spans:
@@ -162,15 +235,6 @@ def source_units(chapter_id: str, text: str) -> list[dict[str, object]]:
             "ordinal": ordinal,
             "source_text": source_text,
             "source_sha256": sha256_text(source_text),
-            "translation": {"zh_cn": None, "status": "pending"},
-            "classification": {
-                "text_type": "unknown",
-                "speaker_character_id": None,
-                "speaker_label": None,
-                "status": "unknown",
-                "confidence": 0,
-                "evidence": [],
-            },
         })
     return units
 

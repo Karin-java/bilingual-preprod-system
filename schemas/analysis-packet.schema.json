@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bilingual-preprod.local/schemas/analysis-packet.schema.json",
+  "title": "Chapter analysis work packet",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["packet_version", "project_id", "chapter_id", "source_sha256", "source_unit_ids", "rules_ref", "output_schema_ref", "output_path", "units"],
+  "properties": {
+    "packet_version": {"const": "1.0.0"},
+    "project_id": {"type": "string", "pattern": "^PRJ-[a-z0-9][a-z0-9-]{0,62}$"},
+    "chapter_id": {"$ref": "common.schema.json#/$defs/chapterId"},
+    "source_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "source_unit_ids": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "common.schema.json#/$defs/sourceUnitId"}},
+    "rules_ref": {"const": "references/analysis_rules.md"},
+    "output_schema_ref": {"const": "schemas/chapter-analysis.schema.json"},
+    "output_path": {"type": "string", "pattern": "^data/analysis/p[0-9]{2,}[.]analysis[.]json$"},
+    "units": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["unit_id", "source_text"],
+        "properties": {
+          "unit_id": {"$ref": "common.schema.json#/$defs/sourceUnitId"},
+          "source_text": {"type": "string"}
+        }
+      }
+    }
+  }
+}

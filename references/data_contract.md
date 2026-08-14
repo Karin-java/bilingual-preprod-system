@@ -22,11 +22,18 @@ project/
 ├── data/
 │   ├── units/p01.units.jsonl
 │   ├── analysis/p01.analysis.json
+│   ├── reviews/p01.events.jsonl
+│   ├── views/analysis/p01.resolved.json
+│   ├── views/analysis/p01.resolved.manifest.json
+│   ├── render/p01.render-manifest.json
 │   ├── registries/characters.json
 │   ├── registries/locations.json
 │   ├── registries/terminology.json
 │   ├── appearances.jsonl
 │   └── profiles.json
+├── work/
+│   ├── analysis/p01.packet.json
+│   └── review/p01.review.md
 ├── deliverables/
 │   ├── scripts_bilingual/p01.md
 │   ├── 全角色章节出镜表.csv
@@ -41,10 +48,15 @@ project/
 
 机器格式分别由 `schemas/` 下的 JSON Schema 定义：
 
-- `source-unit.schema.json`：一个不可变原文单元及其译文、文本类型和说话人判断。
+- `source-unit.schema.json`：一个不可变原文单元；不承载翻译或语义分析。
+- `text-segment.schema.json`：原文单元内按字符区间划分的叙述、动作、对白等语义片段及说话人判断。
+- `analysis-packet.schema.json`：单章、最小上下文的语义分析工作包。
+- `chapter-analysis.schema.json`：一章的文本片段、生产场景和场内 Beat；只引用原文单元 ID。
+- `review-event.schema.json`：针对章、Scene、Beat、原文单元或片段的只追加人工验收事件。
+- `resolved-view-manifest.schema.json`：基础分析、事件日志和当前解析视图之间的哈希及依赖关系。
+- `render-manifest.schema.json`：当前解析视图与双语 Markdown、验收清单之间的哈希及依赖关系。
 - `project.schema.json`：项目状态及已登记产物。
 - `source-manifest.schema.json`：原始文件、正文基线、拆章范围和指纹。
-- `chapter-analysis.schema.json`：一章的生产场景和场内 Beat；只引用原文单元 ID。
 - `character.schema.json`：全局角色、别名、角色类型及首次出镜。
 - `appearance.schema.json`：角色的一次出镜或被提及记录。
 - `character-profile.schema.json`：人物参数、证据、明确/推断/冲突/未知状态。
@@ -79,10 +91,25 @@ JSONL 文件每行必须是一个完整 JSON 对象，并独立符合相应 Sche
 
 - `explicit`：原文明确给出。
 - `inferred`：可由上下文合理推断，必须给出证据和说明。
+- `user_confirmed`：由用户在人工验收中明确补充或确认；原始 Agent 判断仍保留在基础分析中。
 - `conflict`：不同证据互相矛盾，不得自动覆盖。
 - `unknown`：当前材料无法确定，值使用 `null`。
 
 所有语义结论至少引用一个 `source_unit_id`；只有 `unknown` 可以没有证据。置信度范围为 0 到 1，仅表示判断把握，不代替证据。
+
+### 待确认与解析视图
+
+- 基础分析存在未知或冲突时使用 `review.status = provisional`，但只要结构和证据完整即可通过阶段校验。
+- 人工修订只追加到 `data/reviews/`，不得覆盖基础分析；解析视图由基础分析与有效事件确定性重建。
+- 下游模块必须优先读取 `data/views/analysis/pNN.resolved.json`；若不存在才读取 `data/analysis/pNN.analysis.json`。
+- 解析视图的 manifest 保存基础分析、事件日志和视图哈希。任一输入变化时，只将对应章节及其下游产物标为需重建。
+- 详细操作与安全边界见 `references/review_workflow.md`。
+
+### 用户交付格式
+
+- 默认只生成清洗后的 Markdown，不同时复制一份 DOCX。
+- `deliverables/scripts_bilingual/pNN.md` 是单章中英标准剧本；`work/review/pNN.review.md` 是过程验收文件，不属于重复交付件。
+- 用户明确选择某一个 Markdown 文件时，才对该文件执行确定性 DOCX 转换，并保存源文件哈希；转换不得再次调用模型。
 
 ## 6. 场景与 Beat
 
