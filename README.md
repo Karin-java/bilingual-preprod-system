@@ -1,164 +1,117 @@
-# bilingual-preprod-system
+# 双语解说剧前筹系统
 
-一套面向普通创作者的轻量解说剧前筹工具。输入完整英文剧本或小说，借助当前 Agent 逐章完成语义处理；本地程序负责校验、合并和生成用户可读材料。用户无需另行配置模型 API。
+这是基于原始可用原型收敛出的最小版本：一个Skill、两份业务规则、两个确定性脚本。它不使用LangChain、RAG、数据库服务或脚本化模型批跑。
 
-当前版本为 V3。V2 的重型流程已由 Git 标签 `v2-heavy-pipeline-final` 和远程分支 `iteration/v2` 保存。
+## 系统解决什么
 
-## 最终能得到什么
+1. 将DOCX、TXT或Markdown英文原稿无损拆为 `PNN` 章节。
+2. 让当前Agent按章一次完成中英翻译、分场、声轨和章末索引。
+3. 拒绝漏译、摘要化、零对白和错误索引等明显失败结果。
+4. 将已通过章节的索引压缩成外部项目记忆，供后续章节继承译名和场景术语。
+5. 全文完成后生成角色库、场景库、出镜统计、主要角色统计、资产候选清单和待确认问题。
 
-- 每章一份中英标准剧本，明确区分叙述、动作、对白和内心。
-- 具体到生产空间的 Scene，以及 Scene 内的 Beat。
-- 全剧角色信息库、场景信息库和角色章节出镜表。
-- 每位主要角色的独立场景统计。
-- 全文需要用户审核的美术资产候选清单。
-- 带英文线索和中文参考的待确认问题。
-- 项目制作进度和可恢复检查点。
+用户始终按完整章节阅读和审核；场景只用于章节内导航和定向修改。
 
-默认交付 Markdown。只有用户指定某一个文件时才转换 DOCX。
-
-## 为什么 V3 更快
-
-V2 的一次实测中，约 7 KB 的英文章节生成了约 79 KB 的分析 JSON，单章输入还同时加载了分析包、长规则和大 Schema。V3 做了四项根本调整：
-
-1. 每个英文字符只保存在一个双语块中，证据只引用编号。
-2. 每章默认只有一次语义任务，失败才定向修复。
-3. 角色、地点、出镜、资产和 Markdown 全部由本地程序确定性合并。
-4. 每章通过后立即保存检查点，网络或对话中断不会重跑已完成章节。
-
-单章规则与上下文开销目标不超过 8 KB；单章结构结果不得超过“源文件 × 4 + 12 KB”。完整基线见 [V3 数据契约](references/data_contract.md)。
-
-## 系统架构
-
-```mermaid
-flowchart LR
-    A["只读英文原稿"] --> B["无损拆分为 PNN"]
-    B --> C["当前单章轻量任务"]
-    C --> D["双语块 + Scene/Beat + 事实增量"]
-    D --> E["本地完整性校验"]
-    E -->|通过| F["章节 Markdown 检查点"]
-    E -->|失败| C2["定向修复任务"]
-    C2 --> E
-    F --> G["增量角色/地点/出镜数据库"]
-    G --> H["美术资产候选清单"]
-    G --> I["用户验收问题"]
-    H --> J["用户决定范围"]
-    I --> K["局部补充、修改或接受未知"]
-    J --> L["可生产前筹材料"]
-    K --> L
-```
-
-模型只参与图中的“当前单章轻量任务”。其余步骤不调用模型。
-
-## 运行要求
-
-- Python 3.11 或更高版本。
-- 核心流程仅使用 Python 标准库。
-- 支持 `.txt`、`.md` 和 `.docx` 输入。
-- 在仓库根目录运行命令。
-
-## 快速开始
-
-### 1. 接收全本原稿
+## 最小架构
 
 ```text
-python scripts/run_pipeline.py start <source-file> --project-dir <project> --title <project-title>
+bilingual-preprod-system/
+├─ SKILL.md
+├─ references/
+│  ├─ chapter-production.md
+│  └─ full-story-consolidation.md
+├─ scripts/
+│  ├─ extract_chapters.py
+│  └─ verify_and_collect.py
+├─ agents/openai.yaml
+└─ tests/test_minimal_pipeline.py
 ```
 
-例如：
+运行时只有两个脚本：
+
+- `extract_chapters.py`：提取、PNN拆章、来源校验和项目初始化；不调用模型。
+- `verify_and_collect.py`：完整性校验、进度检查点、项目记忆和全文复盘输入；不调用模型。
+
+## 环境
+
+- Python 3.10或更高版本。
+- 处理TXT/Markdown不需要第三方依赖。
+- 处理DOCX需要：
 
 ```text
-python scripts/run_pipeline.py start project/input/full-book.docx --project-dir project/full-book-run --title "Full Book Test"
+python -m pip install python-docx
 ```
 
-启动后查看：
-
-- `deliverables/制作进度.md`：面向用户的进度。
-- `work/pipeline/next-task.json`：Agent 当前唯一任务。
-
-### 2. 让 Agent 完成当前章
-
-Agent 读取 `next-task.json` 指向的单章包，直接生成声明的章节 JSON。它不应该另写批量 API 脚本，也不需要用户提供第三方模型密钥。
-
-### 3. 继续
+## 启动项目
 
 ```text
-python scripts/run_pipeline.py resume <project>
+python scripts/extract_chapters.py "原稿.docx" --out "项目目录" --title "剧名"
 ```
 
-系统会校验当前章、生成中英 Markdown、增量更新全剧数据库，然后准备下一章。重复直到状态为 `ready_for_review`。
-
-随时查看或校验：
+初始化后先查看：
 
 ```text
-python scripts/run_pipeline.py status <project>
-python scripts/validate_pipeline.py <project>
+项目目录/work/制作进度.md
 ```
 
-## 人工验收
-
-用户无需阅读 JSONL。请查看：
-
-- `work/review/pNN.review.md`：某一章的问题，含英文线索和中文参考。
-- `deliverables/待确认问题汇总.md`：全剧问题导航。
-- `deliverables/全文美术资产候选清单.md`：决定哪些角色、场景、服装或道具需要设计。
-
-用户可以直接说“修改 P03-S002 的时间”“补充 P08 某场”“ISS-P03-0001 接受未知”或“合并两个角色”。Agent 会用维护命令记录局部事件并重建受影响文件。具体命令见 [人工验收说明](references/review_workflow.md)。
-
-## King 与 Viktor 这类跨章身份
-
-章节记录不会被回写。后文或用户确认 King 就是 Viktor 后，系统把 King、国王、Viktor、维克多及旧编号都索引到同一个角色 ID。其他模块无论使用哪个名称，都会读取同一角色资料。该机制也适用于其他角色和地点，并支持撤销。
-
-## 美术资产边界
-
-系统只列出全文可能需要设计的资产、剧情明确变体和出现位置。用户可选择：确认、合并、拆分、不制作或资料待补充。
-
-系统不会自动决定造型、色彩、灯光、镜头、构图或建筑风格。角色三视图、场景图和提示词只能在用户确认资产范围并补充设计要求后，作为后续扩展运行。
-
-## 单文件转换为 DOCX
+Agent按照 [SKILL.md](SKILL.md) 读取下一章和 [单章生产规则](references/chapter-production.md)，输出：
 
 ```text
-python scripts/convert_to_docx.py <selected.md> --output <selected.docx>
+项目目录/deliverables/chapters/PNN.md
 ```
 
-只有被指定的文件会转换；默认项目不会同时生成整套 Markdown 和 DOCX 副本。
-
-## 项目数据位置
+## 校验一个章节
 
 ```text
-project/
-├─ source/                 # 只读原稿、正文基线和章节切片
-├─ data/chapters/          # 单章紧凑机器事实
-├─ data/reviews/           # 只追加验收事件
-├─ data/catalogs/          # 全剧角色、地点、出镜和资产数据库
-├─ work/                   # 当前单章任务与用户验收页
-└─ deliverables/           # 清洗后的 Markdown 成品
+python scripts/verify_and_collect.py verify "项目目录" P03
 ```
+
+校验通过后自动更新：
+
+- `work/制作进度.md`
+- `work/项目记忆.md`
+- `work/全文复盘输入.md`
+- `work/state.json`
+
+中断后重新读取制作进度，从第一个未通过章节继续。
+
+人工修改过章节后重新运行同一个校验命令。若批量修改了多个现有章节，可运行：
+
+```text
+python scripts/verify_and_collect.py collect "项目目录"
+```
+
+## 全文复盘
+
+所有章节通过后，Agent读取 [全文复盘规则](references/full-story-consolidation.md) 和 `work/全文复盘输入.md`，生成：
+
+- `角色信息库.md`
+- `场景信息库.md`
+- `全角色章节出镜表.md`
+- `主要角色场景统计.md`
+- `全文美术资产候选清单.md`
+- `待确认问题.md`
+
+默认只生成Markdown。DOCX属于用户点名后的单文件转换，不是本Skill的重复默认产物。
+
+## 验证范围
+
+当前版本已验证：
+
+- CRLF文本按原字符重建。
+- 没有Chapter标题时安全归入P01。
+- 真实前180分钟DOCX提取为P00—P32，共176,382个规范化字符，重新拼接一致。
+- 真实P03产生40个双语块、识别13段引号对白并通过来源覆盖检查。
+- “英文整章保留、中文只写摘要、没有对白声轨”的伪合格结果会被拒绝。
+
+自动校验不能替代人的翻译审美、分场判断和美术决定。它的职责是阻止明显不完整的结果流入下游。
 
 ## 维护入口
 
-| 维护目标 | 文件 |
-|---|---|
-| Agent 完整工作方式 | `SKILL.md` |
-| 数据边界、性能线和交付模板 | `references/data_contract.md` |
-| 单章翻译、Scene/Beat、角色与地点规则 | `references/analysis_rules.md` |
-| 局部修改、撤销、实体归并和资产决定 | `references/review_workflow.md` |
-| 断点恢复、成本与失败处理 | `references/pipeline_rules.md` |
-| 单章机器格式 | `schemas/chapter.schema.json` |
-| 总调度 | `scripts/run_pipeline.py` |
-| 全剧数据库 | `scripts/build_catalogs.py` |
-| 后续报告与美术扩展入口 | `extensions/README.md` |
+- 调整单章业务格式：`references/chapter-production.md`
+- 调整最终交付和身份归并：`references/full-story-consolidation.md`
+- 调整流程顺序和硬边界：`SKILL.md`
+- 调整拆章：`scripts/extract_chapters.py`
+- 调整完整性校验：`scripts/verify_and_collect.py`
 
-## 开发验证
-
-```text
-python scripts/validate_schemas.py
-python -m unittest discover -s tests -v
-```
-
-真实项目再运行：
-
-```text
-python scripts/validate_pipeline.py <project>
-```
-
-回归测试覆盖原文无损、输入/输出成本边界、跨章身份归并、增量缓存、局部修改与撤销、资产决策和单文件 DOCX 转换。
+不要把语义规则写进脚本，也不要把确定性拆章和校验交给模型。

@@ -1,143 +1,120 @@
 ---
 name: bilingual-preprod-system
-description: 面向解说剧生产的轻量双语前筹系统。无损拆分英文原稿，逐章生成中英标准剧本与 Scene/Beat，建立全剧角色、场景、出镜和美术资产候选数据库，并支持按问题编号进行局部人工验收。用于完整剧本前筹、英文小说改编整理、角色/地点统一、生产资产范围盘点及单文件 DOCX 导出。
+description: 将完整英文小说或剧本制作成解说剧前筹资料。用于无损拆分为 PNN 章节，逐章生成中英对照、分场、声轨标注和章末角色/场景索引，再做跨章身份归并、角色与场景信息库、出镜统计和美术资产候选清单。适用于需要低操作成本、可中断恢复、按章或按场人工审核的完整剧本前筹任务。
 ---
 
-# 双语解说剧前筹系统 V3
+# 双语解说剧前筹系统
 
-## 工作目标
+## 目标
 
-用“单章一次语义处理 + 本地确定性合并”完成：
-
-1. 英文原稿无损拆章，编号为 `PNN`。
-2. 中英标准剧本，区分题头、叙述、动作、对白、内心和分隔内容。
-3. 按生产时空切 Scene，按目标、冲突、信息或重大情绪变化切 Beat。
-4. 全剧角色、地点、出镜与人物基础信息数据库。
-5. 全文美术资产候选清单，由用户决定制作范围。
-6. 按章节、Scene、Beat 或问题编号进行局部人工修改和撤销。
-
-系统只整理剧情事实，不替用户决定审美。默认交付 Markdown；用户点名某一个文件时才转换 DOCX。
+把完整英文原稿转换为用户可审核、可直接进入前期制作的 Markdown 资料。保持流程简单：一个 Agent 每次完整理解一章；两个确定性脚本只负责拆章、校验、进度和索引收集。
 
 ## 必守边界
 
-- 英文原文一字不改；每章 `blocks[].text_en` 拼接必须重建章节源文件。
-- 一次只处理 `work/pipeline/next-task.json` 指定的一章。
-- 不自行编写批量模型 API 脚本，不并发重复请求，不要求普通用户配置外部模型 API。
-- 章节通过校验后立即形成检查点；中断后运行 `resume` 继续。
-- 证据只引用块编号，不重复粘贴原文。
-- 不猜测未知事实；制片相关未知项进入用户验收问题。
-- 不自动生成造型、色彩、灯光、镜头、构图、建筑风格或美术提示词。
-- 不重复输出同一内容的多种格式。
+- 原始英文不得删减、改写或用摘要替代。
+- 章节统一编号为 `PNN`，不用 `chNN`。
+- 单章的翻译、分场、声轨、角色和场景索引在同一次语义处理中完成，不拆给多个 Agent 重复阅读。
+- 模型不依赖聊天记忆。每次处理前读取磁盘上的项目记忆。
+- 不要求处理单章的 Agent 先通读全文。
+- 无法由当前证据确认的信息必须标记待确认，不强行推断。
+- 默认只交付 Markdown；用户点名时才将单个文件另行转换为 DOCX。
+- 不生成「该场合需设计资产」列、服装编号总索引、A/B/C 定位或 `character_glossary.md`。
+- 不替用户决定审美、画风、构图、灯光或最终资产制作范围。
 
-详细数据和交付模板见 `references/data_contract.md`；语义口径见 `references/analysis_rules.md`。
+## 规则路由
 
-## 启动完整项目
+- 处理任意单章前，完整读取 `references/chapter-production.md`。
+- 全部章节通过校验后，完整读取 `references/full-story-consolidation.md`。
+- 不把两份参考文件同时塞进普通单章请求。
 
-```text
-python scripts/run_pipeline.py start <source-file> --project-dir <project> --title <title>
-```
+## 工作流
 
-支持 TXT、Markdown 和 DOCX。启动后读取：
+### 1. 建立项目
 
-- `deliverables/制作进度.md`
-- `work/pipeline/next-task.json`
-
-## 执行单章任务
-
-1. 读取 `next-task.json`。
-2. 只读取其中的 `input_path` 和 `schema_path`。
-3. 直接用当前 Agent 的语义能力生成声明的 `output_path`；不要调用外部模型脚本。
-4. 分析任务把 `chapter_input_sha256` 写入章节结果；修复任务保留该值，以始终绑定原始单章包。
-5. 写入 JSON 后运行声明的校验命令。
-6. 通过后运行：
+运行：
 
 ```text
-python scripts/run_pipeline.py resume <project>
+python scripts/extract_chapters.py <原稿.docx|txt|md> --out <项目目录> --title <项目名>
 ```
 
-若用户要求全本处理，持续重复以上步骤。每完成一章都先形成磁盘检查点；上下文将满或任务被中断时，停止在检查点，不把多章合并成一个长请求。
+脚本必须成功完成无损校验。它会保留原始输入副本、生成 `source/chapters/PNN.txt`、`source/manifest.json`、`work/state.json` 和用户可读的 `work/制作进度.md`。
 
-校验失败时，管线会生成 `repair_chapter`。只修复列出的错误和直接依赖，不重做已通过章节。
+这一步不调用模型，不翻译、不分场、不识别角色。
 
-## 单章分析口径
+### 2. 选择下一章
 
-- 场景名必须具体，例如“王宫·维克多的书房”“王宫·北侧走廊”。
-- 地点、内外景、时间线或现实层级变化时切 Scene。
-- 同一时空内目标、冲突、信息或重大情绪变化时切 Beat。
-- 对白填写说话人；不明说话人保留 `unknown` 并建立问题。
-- 登记具名角色、有台词角色、稳定身份角色和高频群众角色。
-- 只被谈论不算实际出镜。
-- 人物事实仅提取年龄、性别、种族、身份、外貌、发型、体型、特殊标记、服装和性格。
-- 地点事实仅提取空间、环境、陈设和状态变化。
-- 普通角色与场景资产由全局程序自动列出；单章只补充明确服装、道具或视觉状态变体。
+读取：
 
-## 全局数据库与身份归并
+1. `work/制作进度.md`
+2. `work/项目记忆.md`（若存在）
+3. 进度中指定的 `source/chapters/PNN.txt`
+4. `references/chapter-production.md`
 
-章节通过后，本地程序增量更新：
-
-- `data/catalogs/catalog.json`
-- `deliverables/角色信息库.md`
-- `deliverables/场景信息库.md`
-- `deliverables/全角色章节出镜表.md`
-- `deliverables/主要角色场景统计.md`
-- `deliverables/全文美术资产候选清单.md`
-- `deliverables/待确认问题汇总.md`
-
-后文确认两个记录是同一角色或地点时，使用通用归并事件。旧章节不重写；旧编号和全部名称索引到统一实体：
+只处理进度中指定的一章，写入：
 
 ```text
-python scripts/manage_entities.py merge <project> --type character --source CHAR-0008 --target CHAR-0002 --note "确认 King 即 Viktor"
+deliverables/chapters/PNN.md
 ```
 
-不要以显示名称作为下游主键。归并与资料决定可撤销，规则见 `references/review_workflow.md`。
+正常长度章节一次完成。只有模型确实无法在一次响应中写完时，才在同一章节任务中续写；不得把场景碎片作为多个用户交付文件。
 
-## 人工验收
+### 3. 校验并形成检查点
 
-普通用户只阅读 Markdown，不编辑 JSONL。问题之间必须有清晰分隔，显示问题编号、位置、英文线索和中文参考，不显示内部字段路径或当前值。
-
-用户可以针对一章、一个 Scene、一个 Beat 或一个文本块补充和修改。Agent 将自然语言答复转换成事件：
+运行：
 
 ```text
-python scripts/review_analysis.py set <project> --chapter P03 --target P03-S001 --field time --value-json '"NIGHT"' --note "用户确认"
-python scripts/review_analysis.py resolve <project> --chapter P03 --issue ISS-P03-0001 --resolution "接受未知" --note "全书复盘完成"
+python scripts/verify_and_collect.py verify <项目目录> PNN
 ```
 
-资产范围由用户逐项决定：
+校验失败时，只修复报告指出的遗漏或格式问题，再次校验。不得绕过校验，也不得自行写一个替代脚本。
 
-```text
-python scripts/manage_assets.py decide <project> --asset ASSET-0001 --status approved --note "确认制作"
-python scripts/manage_assets.py merge <project> --asset ASSET-0004 --target ASSET-0002 --note "共用资产"
-python scripts/manage_assets.py split <project> --asset ASSET-0002 --name "受损状态" --scene P12-S003 --note "单独设计"
-python scripts/manage_assets.py decide <project> --asset ASSET-0007 --status excluded --note "无需制作"
-```
+校验成功后，脚本会更新：
 
-完成验收后再次运行 `resume`。所有问题已处理、所有资产已确认或排除时，项目状态为 `complete`。
+- `work/state.json`
+- `work/制作进度.md`
+- `work/项目记忆.md`
+- `work/全文复盘输入.md`
 
-## 可选 DOCX
+这些文件是外部记忆和恢复点。下一次模型请求不依赖此前聊天记录。
 
-只有用户明确选择某一个 Markdown 时运行：
+### 4. 继续或暂停
 
-```text
-python scripts/convert_to_docx.py <selected.md> --output <selected.docx>
-```
+- 用户要求逐步验收时：每章通过校验后暂停并汇报。
+- 用户明确要求全本连续执行时：继续读取进度中的下一章；仍须逐章落盘和校验。
+- 任务中断时：下次重新读取 `work/制作进度.md`，从第一个未通过章节继续。
+- 不重新处理当前输出校验值未变化的已通过章节。
 
-转换不调用模型，不批量复制全部交付文件。
+### 5. 全文复盘
 
-## 维护与验证
+所有章节均通过后，读取：
 
-```text
-python scripts/validate_schemas.py
-python -m unittest discover -s tests -v
-python scripts/validate_pipeline.py <project>
-```
+1. `references/full-story-consolidation.md`
+2. `work/全文复盘输入.md`
+3. `work/项目记忆.md`
 
-维护入口：
+优先根据章末索引完成跨章归并。只有证据不足或发生冲突时，才定向打开相关的 `deliverables/chapters/PNN.md`，不得默认重读全部正文。
 
-- 数据边界与模板：`references/data_contract.md`
-- 单章语义口径：`references/analysis_rules.md`
-- 人工验收：`references/review_workflow.md`
-- 断点、性能和失败处理：`references/pipeline_rules.md`
-- 单章 Schema：`schemas/chapter.schema.json`
-- 调度器：`scripts/run_pipeline.py`
-- 全局数据库：`scripts/build_catalogs.py`
-- 后续扩展：`extensions/README.md`
+### 6. 人工审核
+
+用户可以直接说：
+
+- “修改 P03。”
+- “P03 场2的地点应为国王书房。”
+- “King 与 Viktor 是同一个人。”
+- “这项视觉信息保持待确认。”
+
+Agent 修改对应 Markdown，重新运行校验和索引收集，再更新受影响的全文交付。用户不编辑 JSON 或事件日志；版本恢复使用 Git。
+
+用户点名将某一个Markdown转换为DOCX时，调用当前运行环境已有的文档转换能力，只转换该文件；转换能力不可用时明确说明，不为此批量复制全部交付物，也不把DOCX逻辑加入核心流水线。
+
+## 完成条件
+
+只有同时满足以下条件才算完成：
+
+1. 所有章节英文均通过来源覆盖校验。
+2. 每个英文内容块都有中文译文。
+3. 原文对白被识别为对白声轨，不能整章归为旁白。
+4. 每章具有有效分场和章末索引。
+5. 全文交付文件齐全，并能追溯到章末索引或具体章节。
+6. 待确认问题没有被静默猜测。
+7. 用户能够按整章阅读，并能按场景定位修改。
