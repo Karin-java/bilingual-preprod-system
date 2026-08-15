@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bilingual-preprod.local/schemas/entity-event.schema.json",
+  "title": "V3 entity decision event",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "event_id", "recorded_at", "actor", "operation", "entity_type", "source_id", "target_id", "field", "value", "note", "target_event_id"],
+  "properties": {
+    "schema_version": {"const": "3.0.0"},
+    "event_id": {"type": "string", "pattern": "^ENT-[0-9]{6}$"},
+    "recorded_at": {"type": "string", "minLength": 1},
+    "actor": {"type": "string", "minLength": 1},
+    "operation": {"enum": ["merge", "separate", "set", "retract"]},
+    "entity_type": {"enum": ["character", "location"]},
+    "source_id": {"type": ["string", "null"]},
+    "target_id": {"type": ["string", "null"]},
+    "field": {"type": ["string", "null"]},
+    "value": {},
+    "note": {"type": "string", "minLength": 1},
+    "target_event_id": {"type": ["string", "null"]}
+  }
+}

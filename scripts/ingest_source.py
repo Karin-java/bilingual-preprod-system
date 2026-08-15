@@ -15,8 +15,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from xml.etree import ElementTree
 
-SCHEMA_VERSION = "2.0.0"
-PIPELINE_VERSION = "2.0.0"
+SCHEMA_VERSION = "3.0.0"
+PIPELINE_VERSION = "3.0.0"
 SUPPORTED_SUFFIXES = {".txt": "txt", ".md": "md", ".docx": "docx"}
 CHAPTER_RE = re.compile(r"^\s*chapter\s+(?P<label>[0-9]+|[ivxlcdm]+|[a-z]+(?:-[a-z]+)*)\b.*$", re.I)
 SPECIAL_RE = re.compile(r"^\s*(?P<label>prologue|epilogue)(?:\s*[:.\-—].*)?\s*$", re.I)
@@ -82,10 +82,6 @@ def parse_chapter_number(label: str) -> int | None:
 
 def sha256_bytes(value: bytes) -> str:
     return hashlib.sha256(value).hexdigest()
-
-
-def sha256_text(value: str) -> str:
-    return sha256_bytes(value.encode("utf-8"))
 
 
 def decode_text(raw: bytes) -> tuple[str, str, str]:
@@ -222,23 +218,6 @@ def split_chapters(text: str) -> tuple[list[dict[str, object]], str, list[str]]:
     return chapters, status, warnings
 
 
-def source_units(chapter_id: str, text: str) -> list[dict[str, object]]:
-    physical_lines = text.splitlines(keepends=True)
-    if not physical_lines:
-        physical_lines = [text]
-    units: list[dict[str, object]] = []
-    for ordinal, source_text in enumerate(physical_lines, 1):
-        units.append({
-            "schema_version": SCHEMA_VERSION,
-            "unit_id": f"{chapter_id}-U{ordinal:04d}",
-            "chapter_id": chapter_id,
-            "ordinal": ordinal,
-            "source_text": source_text,
-            "source_sha256": sha256_text(source_text),
-        })
-    return units
-
-
 def slugify(value: str, fallback_hash: str) -> str:
     value = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
     return (value or fallback_hash[:12])[:63].rstrip("-")
@@ -272,9 +251,7 @@ def ingest_source(input_path: Path, project_dir: Path, title: str | None = None)
     try:
         source_dir = temporary / "source"
         chapters_dir = source_dir / "chapters"
-        units_dir = temporary / "data" / "units"
         chapters_dir.mkdir(parents=True)
-        units_dir.mkdir(parents=True)
 
         source_copy = source_dir / f"original.input{input_path.suffix.lower()}"
         shutil.copyfile(input_path, source_copy)
@@ -286,22 +263,13 @@ def ingest_source(input_path: Path, project_dir: Path, title: str | None = None)
             basename = chapter_id.lower()
             chapter_text = str(chapter.pop("text"))
             chapter_bytes = chapter_text.encode("utf-8")
-            units = source_units(chapter_id, chapter_text)
             chapter_path = chapters_dir / f"{basename}.txt"
-            units_path = units_dir / f"{basename}.units.jsonl"
             chapter_path.write_bytes(chapter_bytes)
-            units_path.write_text(
-                "".join(json.dumps(unit, ensure_ascii=False, separators=(",", ":")) + "\n" for unit in units),
-                encoding="utf-8",
-                newline="\n",
-            )
             chapter_records.append({
                 **chapter,
                 "character_length": len(chapter_text),
                 "sha256": sha256_bytes(chapter_bytes),
                 "source_path": f"source/chapters/{basename}.txt",
-                "units_path": f"data/units/{basename}.units.jsonl",
-                "unit_count": len(units),
             })
 
         manifest = {

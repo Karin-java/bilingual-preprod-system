@@ -1,163 +1,143 @@
 ---
 name: bilingual-preprod-system
-description: 解说剧全流程前筹系统：无损拆分英文原始剧本，生成按场景与情节节拍组织的中英标准剧本，区分动作、叙述和对白，建立角色、地点、出镜、主要角色场景及人物基础信息的证据化数据，并为报告整理和美术资产提示词提供可扩展接口。用于英文剧本或小说的双语前筹、分场、角色统计、人物分析及相关派生产物生成。
+description: 面向解说剧生产的轻量双语前筹系统。无损拆分英文原稿，逐章生成中英标准剧本与 Scene/Beat，建立全剧角色、场景、出镜和美术资产候选数据库，并支持按问题编号进行局部人工验收。用于完整剧本前筹、英文小说改编整理、角色/地点统一、生产资产范围盘点及单文件 DOCX 导出。
 ---
 
-# 解说剧前筹系统
+# 双语解说剧前筹系统 V3
 
-## 核心原则
+## 工作目标
 
-1. 将英文原文作为不可变事实源；保留字符、标点、大小写、段落和顺序。
-2. 只做一次语义抽取；让后续表格、报告和提示词复用结构化事实，不重复读取整本原文。
-3. 区分生产场景与场内 Beat：时空变化时切场，目标、冲突、信息或重大情绪变化时切 Beat。
-4. 使用可用于制片的具体场景名，记录归属主体、具体空间、内外景和时间。
-5. 为角色、场景、出镜和人物信息保存原文证据；无法确定时标记 `unknown`，不得猜测。
-6. 将 JSON/JSONL 作为事实层，将 Markdown、CSV、报告和提示词作为可重建的派生产物。
+用“单章一次语义处理 + 本地确定性合并”完成：
 
-## 工作流
+1. 英文原稿无损拆章，编号为 `PNN`。
+2. 中英标准剧本，区分题头、叙述、动作、对白、内心和分隔内容。
+3. 按生产时空切 Scene，按目标、冲突、信息或重大情绪变化切 Beat。
+4. 全剧角色、地点、出镜与人物基础信息数据库。
+5. 全文美术资产候选清单，由用户决定制作范围。
+6. 按章节、Scene、Beat 或问题编号进行局部人工修改和撤销。
 
-按以下阶段顺序执行，并允许从最近一个通过校验的阶段断点续跑：
+系统只整理剧情事实，不替用户决定审美。默认交付 Markdown；用户点名某一个文件时才转换 DOCX。
 
-1. **无损接收**：保存原始文件、拆分章节、生成稳定段落 ID 和 SHA-256 指纹。
-2. **逐章结构化**：识别叙述、动作、对白、心理和特殊文本，生成中英一一对应记录。
-3. **场景分析**：建立生产场景和场内 Beat，所有边界引用原文单元 ID。
-4. **实体沉淀**：增量维护统一角色、多名称索引、旧 ID 重定向、地点和术语；不要为每章重新建立全局信息。
-5. **出镜统计**：记录具名角色、有台词角色、稳定身份角色和群众角色的出镜或被提及状态。
-6. **人物档案**：提取年龄、性别、种族、身份、外貌、发型、体型、特殊标记、服装和性格，并区分明确、推断、冲突和未知。
-7. **确定性渲染**：从事实层生成中英标准剧本、全角色章节出镜表、主要角色场景统计和人物档案。
-8. **质量校验**：检查原文完整性、引用完整性、ID 稳定性、跨章一致性和派生产物可重建性。
+## 必守边界
 
-## 场景与角色判定
+- 英文原文一字不改；每章 `blocks[].text_en` 拼接必须重建章节源文件。
+- 一次只处理 `work/pipeline/next-task.json` 指定的一章。
+- 不自行编写批量模型 API 脚本，不并发重复请求，不要求普通用户配置外部模型 API。
+- 章节通过校验后立即形成检查点；中断后运行 `resume` 继续。
+- 证据只引用块编号，不重复粘贴原文。
+- 不猜测未知事实；制片相关未知项进入用户验收问题。
+- 不自动生成造型、色彩、灯光、镜头、构图、建筑风格或美术提示词。
+- 不重复输出同一内容的多种格式。
 
-- 场景标题至少包含内/外景、具体地点和时间；优先使用“归属主体 + 具体空间”。
-- 地点、时间线、内外景或现实层级变化时开始新场景。
-- 同一时空内的目标变化、冲突升级、信息揭露、权力逆转或重大情绪变化记录为新 Beat。
-- 角色实际行动或在场说话时记录出镜；仅被谈论时记录为被提及。
-- 为管家、园丁等具有连续性的身份角色分配稳定角色 ID；不要与无连续性的群众群体混为一体。
-- 无法确认对白说话人时保留台词并标记未知说话人。
-- 主要角色由系统根据剧情作用提出候选，再由用户确认业务定位。
+详细数据和交付模板见 `references/data_contract.md`；语义口径见 `references/analysis_rules.md`。
 
-## 数据和扩展
-
-执行前读取 `references/data_contract.md`，并让事实记录符合 `schemas/*.schema.json`。
-
-新增报告、美术资产提示词或其他能力时：
-
-1. 通过扩展清单声明所消费的数据类型和版本。
-2. 仅读取核心事实层，不覆盖原文或核心记录。
-3. 将模块私有数据写入自己的命名空间。
-4. 保存输入哈希、模块版本和输出路径，使产物可追溯、可重建。
-
-扩展默认不随核心总管线自动执行。用户需要时再运行，扩展输入变化后才重建；扩展不得让已经完成的章节重新分析。报告整理使用确定性模式，美术提示词使用单 Scene 的有界 Agent 任务。运行美术任务前读取 `references/art_prompt_extension_rules.md`。
-
-## 当前执行入口
-
-优先使用总管线启动或续跑。它每次只暴露一个有界任务，并自动复用已经通过校验的阶段：
-
-总管线运行时读取 `references/pipeline_rules.md`；不要绕过唯一下一任务一次加载多章。
+## 启动完整项目
 
 ```text
-python scripts/run_pipeline.py start <source> --project-dir <project>
+python scripts/run_pipeline.py start <source-file> --project-dir <project> --title <title>
+```
+
+支持 TXT、Markdown 和 DOCX。启动后读取：
+
+- `deliverables/制作进度.md`
+- `work/pipeline/next-task.json`
+
+## 执行单章任务
+
+1. 读取 `next-task.json`。
+2. 只读取其中的 `input_path` 和 `schema_path`。
+3. 直接用当前 Agent 的语义能力生成声明的 `output_path`；不要调用外部模型脚本。
+4. 分析任务把 `chapter_input_sha256` 写入章节结果；修复任务保留该值，以始终绑定原始单章包。
+5. 写入 JSON 后运行声明的校验命令。
+6. 通过后运行：
+
+```text
 python scripts/run_pipeline.py resume <project>
-python scripts/run_pipeline.py status <project>
+```
+
+若用户要求全本处理，持续重复以上步骤。每完成一章都先形成磁盘检查点；上下文将满或任务被中断时，停止在检查点，不把多章合并成一个长请求。
+
+校验失败时，管线会生成 `repair_chapter`。只修复列出的错误和直接依赖，不重做已通过章节。
+
+## 单章分析口径
+
+- 场景名必须具体，例如“王宫·维克多的书房”“王宫·北侧走廊”。
+- 地点、内外景、时间线或现实层级变化时切 Scene。
+- 同一时空内目标、冲突、信息或重大情绪变化时切 Beat。
+- 对白填写说话人；不明说话人保留 `unknown` 并建立问题。
+- 登记具名角色、有台词角色、稳定身份角色和高频群众角色。
+- 只被谈论不算实际出镜。
+- 人物事实仅提取年龄、性别、种族、身份、外貌、发型、体型、特殊标记、服装和性格。
+- 地点事实仅提取空间、环境、陈设和状态变化。
+- 普通角色与场景资产由全局程序自动列出；单章只补充明确服装、道具或视觉状态变体。
+
+## 全局数据库与身份归并
+
+章节通过后，本地程序增量更新：
+
+- `data/catalogs/catalog.json`
+- `deliverables/角色信息库.md`
+- `deliverables/场景信息库.md`
+- `deliverables/全角色章节出镜表.md`
+- `deliverables/主要角色场景统计.md`
+- `deliverables/全文美术资产候选清单.md`
+- `deliverables/待确认问题汇总.md`
+
+后文确认两个记录是同一角色或地点时，使用通用归并事件。旧章节不重写；旧编号和全部名称索引到统一实体：
+
+```text
+python scripts/manage_entities.py merge <project> --type character --source CHAR-0008 --target CHAR-0002 --note "确认 King 即 Viktor"
+```
+
+不要以显示名称作为下游主键。归并与资料决定可撤销，规则见 `references/review_workflow.md`。
+
+## 人工验收
+
+普通用户只阅读 Markdown，不编辑 JSONL。问题之间必须有清晰分隔，显示问题编号、位置、英文线索和中文参考，不显示内部字段路径或当前值。
+
+用户可以针对一章、一个 Scene、一个 Beat 或一个文本块补充和修改。Agent 将自然语言答复转换成事件：
+
+```text
+python scripts/review_analysis.py set <project> --chapter P03 --target P03-S001 --field time --value-json '"NIGHT"' --note "用户确认"
+python scripts/review_analysis.py resolve <project> --chapter P03 --issue ISS-P03-0001 --resolution "接受未知" --note "全书复盘完成"
+```
+
+资产范围由用户逐项决定：
+
+```text
+python scripts/manage_assets.py decide <project> --asset ASSET-0001 --status approved --note "确认制作"
+python scripts/manage_assets.py merge <project> --asset ASSET-0004 --target ASSET-0002 --note "共用资产"
+python scripts/manage_assets.py split <project> --asset ASSET-0002 --name "受损状态" --scene P12-S003 --note "单独设计"
+python scripts/manage_assets.py decide <project> --asset ASSET-0007 --status excluded --note "无需制作"
+```
+
+完成验收后再次运行 `resume`。所有问题已处理、所有资产已确认或排除时，项目状态为 `complete`。
+
+## 可选 DOCX
+
+只有用户明确选择某一个 Markdown 时运行：
+
+```text
+python scripts/convert_to_docx.py <selected.md> --output <selected.docx>
+```
+
+转换不调用模型，不批量复制全部交付文件。
+
+## 维护与验证
+
+```text
+python scripts/validate_schemas.py
+python -m unittest discover -s tests -v
 python scripts/validate_pipeline.py <project>
 ```
 
-核心流程完成到可用状态后，可按需运行独立扩展：
+维护入口：
 
-```text
-python scripts/run_extension.py list
-python scripts/run_extension.py prepare <project> --module reports
-python scripts/run_extension.py prepare <project> --module art-prompts --target P03-S001
-python scripts/run_extension.py validate <project> --module reports
-python scripts/run_extension.py validate <project> --module art-prompts
-```
-
-`reports` 只生成 `deliverables/前筹总览.md`，作为已有交付文件的导航和状态摘要，不复制正文。`art-prompts` 只生成当前 Scene 的机器事实包和一个 Markdown 输出任务；Agent 只能读取该包，不得回读整本原文或补写待确认事实。
-
-执行 `work/pipeline/next-task.json` 声明的唯一任务。若为全书人物复盘且完整材料仍无法确认剩余参数，验收当前角色包后继续：
-
-```text
-python scripts/run_pipeline.py ack-recap <project> --character CHAR-0001 --note <review-result>
-```
-
-需要单独诊断阶段时再使用以下细分入口：
-
-```text
-python scripts/ingest_source.py <source> --project-dir <project>
-python scripts/validate_ingest.py <project>
-python scripts/prepare_analysis.py <project> --chapter P01
-```
-
-读取 `references/analysis_rules.md` 和生成的 `work/analysis/p01.packet.json`，将结构化结果写入工作包声明的 `output_path`，然后执行：
-
-```text
-python scripts/validate_analysis.py <project> --chapter P01
-python scripts/review_analysis.py materialize <project> --chapter P01
-python scripts/render_chapter.py <project> --chapter P01
-python scripts/validate_render.py <project> --chapter P01
-python scripts/build_registries.py <project>
-python scripts/validate_registries.py <project>
-python scripts/build_profiles.py <project>
-python scripts/validate_profiles.py <project>
-python scripts/build_appearance_reports.py <project>
-python scripts/validate_appearance_reports.py <project>
-```
-
-后文确认两个角色记录属于同一人时，通过通用身份事件归并；不要重写早期章节：
-
-```text
-python scripts/manage_character_identities.py merge <project> --source CHAR-0008 --target CHAR-0002 --canonical-name Viktor --chinese-name 维克托 --note <evidence-or-user-confirmation>
-python scripts/manage_character_identities.py retract <project> --event IDENT-000001 --note <reason>
-```
-
-后文章节或全书复盘确认人物参数时，追加全局资料决定；旧章节事实和证据保持不变：
-
-```text
-python scripts/manage_profile_decisions.py set <project> --character Viktor --field story_role --value 男主 --note <依据或用户确认>
-python scripts/manage_profile_decisions.py retract <project> --event PROFILE-000001 --note <reason>
-```
-
-结构与证据通过即可继续；`provisional` 表示仍有待确认项，不是校验失败。人工验收时读取 `references/review_workflow.md`，追加精准修订并物化当前视图：
-
-```text
-python scripts/review_analysis.py set <project> --chapter P01 --scope P01-S001 --field time_of_day.value --value-json '"night"' --note <reason> --resolve ISS-P01-0001
-python scripts/review_analysis.py note <project> --chapter P01 --scope P01 --note <supplement>
-python scripts/review_analysis.py retract <project> --chapter P01 --event REV-P01-000001 --note <reason>
-```
-
-只处理当前章节；校验通过前不要进入下一章或下游渲染。下游优先读取 `data/views/analysis/pNN.resolved.json`。
-
-## 资源
-
-- `references/data_contract.md`：事实层、稳定 ID、证据链、目录和扩展契约。
-- `schemas/*.schema.json`：核心记录和扩展清单的机器校验规则。
-- `scripts/validate_schemas.py`：校验 Schema 语法和本地引用。
-- `scripts/run_extension.py` / `scripts/validate_extensions.py`：发现、按需准备并校验可插拔扩展。
-- `extensions/reports/`：确定性前筹总览扩展。
-- `extensions/art-prompts/`：单 Scene 美术提示词任务扩展。
-- `references/art_prompt_extension_rules.md`：美术提示词的事实边界、未知项和默认 Markdown 交付规则。
-- `scripts/ingest_source.py`：无损接收 TXT、Markdown 或 DOCX，拆章并生成稳定原文单元。
-- `scripts/validate_ingest.py`：校验原文件、正文基线、章节和原文单元的指纹及重组完整性。
-- `references/analysis_rules.md`：文本片段、说话人、Scene、Beat、证据和人工复核规则。
-- `scripts/prepare_analysis.py`：为单个章节生成最小上下文分析工作包及输入哈希。
-- `scripts/validate_analysis.py`：校验字符覆盖、说话人、场景/Beat分区、证据和复核状态。
-- `references/review_workflow.md`：待确认项、精准人工修订、撤销和下游读取规则。
-- `scripts/review_analysis.py`：追加验收事件并确定性重建当前章节解析视图。
-- `scripts/render_chapter.py`：从当前解析视图生成唯一的中英 Markdown 剧本和双语验收清单，不调用模型。
-- `scripts/validate_render.py`：校验英文原文、中文译文、Scene、Beat、待确认线索和输出哈希。
-- `references/entity_rules.md`：具名人物、有台词角色、身份角色、群众候选、统一身份解析、别名匹配和地点登记规则。
-- `scripts/build_registries.py`：从所有当前解析视图和身份事件确定性重建统一角色、多名称索引和地点登记表。
-- `scripts/manage_character_identities.py`：追加或撤销角色归并决定，不回写章节分析。
-- `scripts/validate_registries.py`：校验实体 ID、名称索引、旧 ID 重定向、跨章链接、候选项和人工查看版可重建性。
-- `references/appearance_rules.md`：全角色章节对应矩阵、每个主要角色独立出镜表、实际出镜、梦境/回忆、仅被提及和统一身份去重规则。
-- `scripts/build_appearance_reports.py`：生成机器出镜事实、角色为行且 P章节为列的出镜矩阵，以及主要角色场景统计 Markdown。
-- `scripts/validate_appearance_reports.py`：校验稳定出镜 ID、统一角色去重、场景摘要和两份 Markdown 的可重建性。
-- `scripts/build_profiles.py`：按统一角色永久编号聚合逐章资料事实，生成角色档案和只含未决项的全书复盘清单。
-- `scripts/manage_profile_decisions.py`：追加或撤销全局人物资料确认，不回写已经完成的章节。
-- `scripts/validate_profiles.py`：校验必需人物参数、证据、跨章归并、未知项和 Markdown 可重建性。
-- `references/pipeline_rules.md`：唯一下一任务、阶段失效边界、复用、单角色复盘和成本统计规则。
-- `scripts/run_pipeline.py`：启动或续跑总管线，生成机器状态、唯一下一任务和用户可读制作进度。
-- `scripts/validate_pipeline.py`：校验断点状态、任务输入指纹、复用产物、复盘事件和制作进度可重建性。
-
-每完成一个流水线阶段即运行对应校验。失败时只返修受影响的章节、场景或记录，不重跑已通过的全量数据。
+- 数据边界与模板：`references/data_contract.md`
+- 单章语义口径：`references/analysis_rules.md`
+- 人工验收：`references/review_workflow.md`
+- 断点、性能和失败处理：`references/pipeline_rules.md`
+- 单章 Schema：`schemas/chapter.schema.json`
+- 调度器：`scripts/run_pipeline.py`
+- 全局数据库：`scripts/build_catalogs.py`
+- 后续扩展：`extensions/README.md`

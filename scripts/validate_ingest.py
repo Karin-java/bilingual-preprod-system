@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Independently verify source, chapter and source-unit integrity."""
+"""Independently verify the V3 source baseline and chapter slices."""
 from __future__ import annotations
 
 import argparse
@@ -78,35 +78,6 @@ def validate_project(project_dir: Path) -> list[str]:
             errors.append(f"{chapter_id}: chapter character length mismatch")
         reconstructed_chapters.append(chapter_text)
 
-        unit_texts: list[str] = []
-        try:
-            unit_lines = (project_dir / chapter["units_path"]).read_text(encoding="utf-8").splitlines()
-        except (OSError, KeyError, UnicodeDecodeError) as exc:
-            errors.append(f"{chapter_id}: units unreadable: {exc}")
-            continue
-        if len(unit_lines) != chapter.get("unit_count"):
-            errors.append(f"{chapter_id}: unit count mismatch")
-        for ordinal, line in enumerate(unit_lines, 1):
-            try:
-                unit = json.loads(line)
-            except json.JSONDecodeError as exc:
-                errors.append(f"{chapter_id}: invalid JSONL row {ordinal}: {exc}")
-                continue
-            expected_id = f"{chapter_id}-U{ordinal:04d}"
-            if unit.get("unit_id") != expected_id or unit.get("ordinal") != ordinal:
-                errors.append(f"{chapter_id}: unstable unit identity at row {ordinal}")
-            if unit.get("chapter_id") != chapter_id:
-                errors.append(f"{chapter_id}: unit belongs to another chapter at row {ordinal}")
-            text = unit.get("source_text")
-            if not isinstance(text, str):
-                errors.append(f"{chapter_id}: unit text is not a string at row {ordinal}")
-                continue
-            if digest(text.encode("utf-8")) != unit.get("source_sha256"):
-                errors.append(f"{chapter_id}: unit hash mismatch at row {ordinal}")
-            unit_texts.append(text)
-        if "".join(unit_texts) != chapter_text:
-            errors.append(f"{chapter_id}: units do not reconstruct the chapter")
-
     if expected_start != len(canonical_text):
         errors.append("chapter ranges do not cover the canonical source")
     if "".join(reconstructed_chapters) != canonical_text:
@@ -115,7 +86,7 @@ def validate_project(project_dir: Path) -> list[str]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="校验原文件、正文基线、拆章和原文单元完整性")
+    parser = argparse.ArgumentParser(description="校验原文件、正文基线和无损拆章完整性")
     parser.add_argument("project_dir", type=Path)
     args = parser.parse_args()
     errors = validate_project(args.project_dir)
@@ -124,7 +95,7 @@ def main() -> int:
         for error in errors:
             print(f" - {error}")
         return 1
-    print("INGEST VALIDATION PASSED: source, chapters and units reconstruct exactly.")
+    print("INGEST VALIDATION PASSED: source and chapters reconstruct exactly.")
     return 0
 
 

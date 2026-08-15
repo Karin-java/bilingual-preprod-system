@@ -1,0 +1,186 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bilingual-preprod.local/schemas/chapter.schema.json",
+  "title": "V3 lean bilingual chapter record",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "chapter_id", "source_sha256", "input_sha256",
+    "title_en", "title_zh", "pov", "blocks", "front_matter_block_ids",
+    "scenes", "characters", "character_facts", "locations", "appearances",
+    "identity_links", "asset_candidates", "issues"
+  ],
+  "properties": {
+    "schema_version": {"const": "3.0.0"},
+    "chapter_id": {"type": "string", "pattern": "^P[0-9]{2,}$"},
+    "source_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "input_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "title_en": {"type": ["string", "null"]},
+    "title_zh": {"type": ["string", "null"]},
+    "pov": {"type": ["string", "null"]},
+    "blocks": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["block_id", "kind", "speaker_ref", "text_en", "text_zh"],
+        "properties": {
+          "block_id": {"type": "string", "pattern": "^P[0-9]{2,}-B[0-9]{4}$"},
+          "kind": {"enum": ["heading", "narration", "action", "dialogue", "thought", "separator"]},
+          "speaker_ref": {"type": ["string", "null"]},
+          "text_en": {"type": "string", "minLength": 1},
+          "text_zh": {"type": "string"}
+        }
+      }
+    },
+    "front_matter_block_ids": {
+      "type": "array", "uniqueItems": true,
+      "items": {"type": "string", "pattern": "^P[0-9]{2,}-B[0-9]{4}$"}
+    },
+    "scenes": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["scene_id", "ordinal", "name_zh", "name_en", "location_ref", "parent_location_zh", "int_ext", "time", "summary_zh", "block_ids", "beats", "character_refs"],
+        "properties": {
+          "scene_id": {"type": "string", "pattern": "^P[0-9]{2,}-S[0-9]{3}$"},
+          "ordinal": {"type": "integer", "minimum": 1},
+          "name_zh": {"type": "string", "minLength": 1},
+          "name_en": {"type": ["string", "null"]},
+          "location_ref": {"type": "string", "minLength": 1},
+          "parent_location_zh": {"type": ["string", "null"]},
+          "int_ext": {"enum": ["INT", "EXT", "MIXED", "UNKNOWN"]},
+          "time": {"enum": ["DAY", "NIGHT", "DAWN", "DUSK", "CONTINUOUS", "UNKNOWN"]},
+          "summary_zh": {"type": "string", "minLength": 1},
+          "block_ids": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string"}},
+          "beats": {
+            "type": "array", "minItems": 1,
+            "items": {
+              "type": "object", "additionalProperties": false,
+              "required": ["beat_id", "title_zh", "summary_zh", "block_ids"],
+              "properties": {
+                "beat_id": {"type": "string", "pattern": "^P[0-9]{2,}-S[0-9]{3}-B[0-9]{3}$"},
+                "title_zh": {"type": "string", "minLength": 1},
+                "summary_zh": {"type": "string", "minLength": 1},
+                "block_ids": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string"}}
+              }
+            }
+          },
+          "character_refs": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}}
+        }
+      }
+    },
+    "characters": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["ref", "canonical_name_en", "name_zh", "aliases_en", "aliases_zh", "category", "importance", "story_role_zh"],
+        "properties": {
+          "ref": {"type": "string", "minLength": 1},
+          "canonical_name_en": {"type": "string", "minLength": 1},
+          "name_zh": {"type": ["string", "null"]},
+          "aliases_en": {"type": "array", "items": {"type": "string", "minLength": 1}},
+          "aliases_zh": {"type": "array", "items": {"type": "string", "minLength": 1}},
+          "category": {"enum": ["named", "speaking", "recurring_role", "crowd"]},
+          "importance": {"enum": ["major", "supporting", "minor", "unknown"]},
+          "story_role_zh": {"type": ["string", "null"]}
+        }
+      }
+    },
+    "character_facts": {"type": "array", "items": {"$ref": "#/$defs/characterFact"}},
+    "locations": {"type": "array", "items": {"$ref": "#/$defs/location"}},
+    "appearances": {"type": "array", "items": {"$ref": "#/$defs/appearance"}},
+    "identity_links": {"type": "array", "items": {"$ref": "#/$defs/identityLink"}},
+    "asset_candidates": {"type": "array", "items": {"$ref": "#/$defs/assetCandidate"}},
+    "issues": {"type": "array", "items": {"$ref": "#/$defs/issue"}}
+  },
+  "$defs": {
+    "evidence": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "pattern": "^P[0-9]{2,}-B[0-9]{4}$"}},
+    "characterFact": {
+      "type": "object", "additionalProperties": false,
+      "required": ["fact_id", "subject_ref", "field", "value_zh", "source_block_ids"],
+      "properties": {
+        "fact_id": {"type": "string", "pattern": "^P[0-9]{2,}-CF[0-9]{3}$"},
+        "subject_ref": {"type": "string", "minLength": 1},
+        "field": {"enum": ["age", "gender", "race", "identity", "appearance", "hair", "body", "special_marks", "clothing", "personality"]},
+        "value_zh": {"type": "string", "minLength": 1},
+        "source_block_ids": {"$ref": "#/$defs/evidence"}
+      }
+    },
+    "locationFact": {
+      "type": "object", "additionalProperties": false,
+      "required": ["fact_id", "field", "value_zh", "source_block_ids"],
+      "properties": {
+        "fact_id": {"type": "string", "pattern": "^P[0-9]{2,}-LF[0-9]{3}$"},
+        "field": {"enum": ["space", "environment", "furniture", "state_change"]},
+        "value_zh": {"type": "string", "minLength": 1},
+        "source_block_ids": {"$ref": "#/$defs/evidence"}
+      }
+    },
+    "location": {
+      "type": "object", "additionalProperties": false,
+      "required": ["ref", "name_en", "name_zh", "aliases_en", "aliases_zh", "parent_zh", "int_ext", "facts"],
+      "properties": {
+        "ref": {"type": "string", "minLength": 1},
+        "name_en": {"type": ["string", "null"]},
+        "name_zh": {"type": "string", "minLength": 1},
+        "aliases_en": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "aliases_zh": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "parent_zh": {"type": ["string", "null"]},
+        "int_ext": {"enum": ["INT", "EXT", "MIXED", "UNKNOWN"]},
+        "facts": {"type": "array", "items": {"$ref": "#/$defs/locationFact"}}
+      }
+    },
+    "appearance": {
+      "type": "object", "additionalProperties": false,
+      "required": ["appearance_id", "character_ref", "scene_id", "presence", "summary_zh", "source_block_ids"],
+      "properties": {
+        "appearance_id": {"type": "string", "pattern": "^P[0-9]{2,}-AP[0-9]{3}$"},
+        "character_ref": {"type": "string", "minLength": 1},
+        "scene_id": {"type": "string"},
+        "presence": {"enum": ["actual", "memory", "dream", "mentioned"]},
+        "summary_zh": {"type": "string", "minLength": 1},
+        "source_block_ids": {"$ref": "#/$defs/evidence"}
+      }
+    },
+    "identityLink": {
+      "type": "object", "additionalProperties": false,
+      "required": ["link_id", "entity_type", "left_ref", "right_ref", "relationship", "note_zh", "source_block_ids"],
+      "properties": {
+        "link_id": {"type": "string", "pattern": "^P[0-9]{2,}-IL[0-9]{3}$"},
+        "entity_type": {"enum": ["character", "location"]},
+        "left_ref": {"type": "string", "minLength": 1},
+        "right_ref": {"type": "string", "minLength": 1},
+        "relationship": {"enum": ["same", "possible_same"]},
+        "note_zh": {"type": "string", "minLength": 1},
+        "source_block_ids": {"$ref": "#/$defs/evidence"}
+      }
+    },
+    "assetCandidate": {
+      "type": "object", "additionalProperties": false,
+      "required": ["candidate_key", "type", "name_zh", "name_en", "subject_ref", "variant_zh", "scene_ids", "source_block_ids", "reason_zh"],
+      "properties": {
+        "candidate_key": {"type": "string", "minLength": 1},
+        "type": {"enum": ["character", "location", "costume", "prop"]},
+        "name_zh": {"type": "string", "minLength": 1},
+        "name_en": {"type": ["string", "null"]},
+        "subject_ref": {"type": ["string", "null"]},
+        "variant_zh": {"type": ["string", "null"]},
+        "scene_ids": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string"}},
+        "source_block_ids": {"$ref": "#/$defs/evidence"},
+        "reason_zh": {"type": "string", "minLength": 1}
+      }
+    },
+    "issue": {
+      "type": "object", "additionalProperties": false,
+      "required": ["issue_id", "scope_id", "question_zh", "evidence_block_ids", "status", "resolution_zh"],
+      "properties": {
+        "issue_id": {"type": "string", "pattern": "^ISS-P[0-9]{2,}-[0-9]{4}$"},
+        "scope_id": {"type": "string", "minLength": 1},
+        "question_zh": {"type": "string", "minLength": 1},
+        "evidence_block_ids": {"$ref": "#/$defs/evidence"},
+        "status": {"enum": ["pending", "resolved"]},
+        "resolution_zh": {"type": ["string", "null"]}
+      }
+    }
+  }
+}

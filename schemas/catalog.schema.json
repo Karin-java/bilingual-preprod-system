@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bilingual-preprod.local/schemas/catalog.schema.json",
+  "title": "V3 merged production catalogs",
+  "type": "object",
+  "required": ["schema_version", "chapter_inputs", "characters", "locations", "assets", "character_alias_index", "location_alias_index", "character_redirects", "location_redirects", "asset_redirects", "pending_issues"],
+  "properties": {
+    "schema_version": {"const": "3.0.0"},
+    "chapter_inputs": {"type": "object"},
+    "characters": {"type": "array"},
+    "locations": {"type": "array"},
+    "assets": {"type": "array"},
+    "character_alias_index": {"type": "object"},
+    "location_alias_index": {"type": "object"},
+    "character_redirects": {"type": "object"},
+    "location_redirects": {"type": "object"},
+    "asset_redirects": {"type": "object"},
+    "pending_issues": {"type": "array"}
+  }
+}

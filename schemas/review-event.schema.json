@@ -1,47 +1,20 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://bilingual-preprod.local/schemas/review-event.schema.json",
-  "title": "Append-only human review event",
+  "title": "V3 append-only targeted review event",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "event_id", "chapter_id", "sequence", "recorded_at", "actor", "scope_type", "scope_id", "operation", "field_path", "value", "note", "resolves_issue_ids", "target_event_id", "base_analysis_sha256"],
+  "required": ["schema_version", "event_id", "recorded_at", "actor", "operation", "target_id", "field", "value", "note", "target_event_id"],
   "properties": {
-    "schema_version": {"const": "1.0.0"},
-    "event_id": {"$ref": "common.schema.json#/$defs/reviewEventId"},
-    "chapter_id": {"$ref": "common.schema.json#/$defs/chapterId"},
-    "sequence": {"type": "integer", "minimum": 1},
-    "recorded_at": {"type": "string", "format": "date-time"},
-    "actor": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["type", "label"],
-      "properties": {
-        "type": {"enum": ["user", "agent"]},
-        "label": {"type": "string", "minLength": 1}
-      }
-    },
-    "scope_type": {"enum": ["chapter", "scene", "beat", "source_unit", "segment", "character_observation", "profile_observation"]},
-    "scope_id": {"type": "string", "minLength": 1},
-    "operation": {"enum": ["set_field", "add_note", "retract_event"]},
-    "field_path": {"type": ["string", "null"]},
+    "schema_version": {"const": "3.0.0"},
+    "event_id": {"type": "string", "pattern": "^REV-P[0-9]{2,}-[0-9]{6}$"},
+    "recorded_at": {"type": "string", "minLength": 1},
+    "actor": {"type": "string", "minLength": 1},
+    "operation": {"enum": ["set", "resolve_issue", "note", "retract"]},
+    "target_id": {"type": ["string", "null"]},
+    "field": {"type": ["string", "null"]},
     "value": {},
     "note": {"type": "string", "minLength": 1},
-    "resolves_issue_ids": {"type": "array", "uniqueItems": true, "items": {"$ref": "common.schema.json#/$defs/reviewIssueId"}},
-    "target_event_id": {"anyOf": [{"$ref": "common.schema.json#/$defs/reviewEventId"}, {"type": "null"}]},
-    "base_analysis_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
-  },
-  "allOf": [
-    {
-      "if": {"properties": {"operation": {"const": "set_field"}}},
-      "then": {"properties": {"field_path": {"type": "string", "minLength": 1}, "target_event_id": {"type": "null"}}}
-    },
-    {
-      "if": {"properties": {"operation": {"const": "add_note"}}},
-      "then": {"properties": {"field_path": {"type": "null"}, "target_event_id": {"type": "null"}}}
-    },
-    {
-      "if": {"properties": {"operation": {"const": "retract_event"}}},
-      "then": {"properties": {"field_path": {"type": "null"}, "target_event_id": {"$ref": "common.schema.json#/$defs/reviewEventId"}, "resolves_issue_ids": {"maxItems": 0}}}
-    }
-  ]
+    "target_event_id": {"type": ["string", "null"]}
+  }
 }

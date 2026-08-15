@@ -1,52 +1,43 @@
-# 待确认与人工验收工作流
+# V3 人工验收与局部重建
 
-## 1. 三层数据
+普通用户只阅读：
 
-1. `data/analysis/pNN.analysis.json` 是 Agent 的单章基础分析，校验通过后不再原位改写。
-2. `data/reviews/pNN.events.jsonl` 是只追加的人工验收事件，记录修改人、范围、值、理由、时间和所解决的待确认项。
-3. `data/views/analysis/pNN.resolved.json` 是可重建的当前解析视图。所有下游模块优先读取此视图；不存在时才读取基础分析。
-4. `work/review/pNN.review.md` 是普通用户实际查看的双语验收清单；JSONL 只作为系统内部审计记录。
-5. `data/registries/character-identity.events.jsonl` 单独记录跨章角色归并与撤销；`work/registry/entities.md` 展示普通用户可确认的同一角色候选。
-6. `data/profiles/profile-decisions.jsonl` 单独记录全书级人物参数确认；它以统一角色编号为目标，不要求回写任何旧章节。
+- `work/review/pNN.review.md`
+- `deliverables/待确认问题汇总.md`
+- `deliverables/全文美术资产候选清单.md`
 
-这样既保留原始判断和修改历史，又只需重建受影响章节，不必让 Agent 重新读取或改写整本内容。
+用户按编号回复即可，不直接编辑 JSON 或 JSONL。Agent 将答复转换成只追加事件。
 
-## 2. 精准范围
+## 单章修改
 
-支持以下稳定范围：
+```text
+python scripts/review_analysis.py set <project> --chapter P03 --target P03-S001 --field time --value-json '"NIGHT"' --note "用户确认"
+python scripts/review_analysis.py resolve <project> --chapter P03 --issue ISS-P03-0001 --resolution "原文未说明，用户接受未知" --note "全书复盘完成"
+python scripts/review_analysis.py note <project> --chapter P03 --target P03-S001 --note "用户补充"
+python scripts/review_analysis.py retract <project> --chapter P03 --event REV-P03-000001 --note "撤销"
+```
 
-- 章节：`P03`
-- Scene：`P03-S001`
-- Beat：`P03-S001-B002`
-- 原文单元：`P03-U0015`
-- 文本片段：`P03-U0015-G002`
-- 角色观察：`COBS-P03-0001`
-- 角色资料线索：`POBS-P03-0001`
+允许修改中文翻译、分类、说话人、Scene、Beat、事实增量和问题状态。禁止修改 `text_en`、源哈希、章节编号和输入哈希。事件失效时只重建当前章、全局小型目录和对应 Markdown，不重新分析其他章节。
 
-章节和原文单元可追加说明；Scene、Beat 和文本片段还可修订允许的语义字段。原文字段、稳定 ID、字符区间、章节/场景分区和哈希禁止通过普通验收事件修改。
+## 角色或地点归并
 
-## 3. 事件操作
+```text
+python scripts/manage_entities.py merge <project> --type character --source CHAR-0008 --target CHAR-0002 --note "确认 King 即 Viktor"
+python scripts/manage_entities.py separate <project> --type character --source CHAR-0008 --target CHAR-0002 --note "确认不是同一角色"
+python scripts/manage_entities.py set <project> --type character --target CHAR-0002 --field story_role_zh --value-json '"男主"' --note "用户确认"
+python scripts/manage_entities.py retract <project> --event ENT-000001 --note "撤销"
+```
 
-- `set_field`：修订一个允许的语义字段；物化后该判断标记为 `user_confirmed`。
-- `add_note`：为指定范围追加补充说明，也可将无法进一步确认的未知项标记为已人工接受。
-- `retract_event`：撤销既有事件；不删除历史记录，重新物化即可恢复修改前结果。
+归并不回写历史章节。名称、别名和旧编号均解析到目标编号；撤销后确定性恢复。
 
-事件可通过 `resolves_issue_ids` 关闭一个或多个待确认项。未关闭项继续保留在解析视图中；全部关闭后视图状态变为 `ready`。
+## 资产范围决定
 
-## 4. 用户可读验收清单
+```text
+python scripts/manage_assets.py decide <project> --asset ASSET-0001 --status approved --note "确认制作"
+python scripts/manage_assets.py merge <project> --asset ASSET-0004 --target ASSET-0002 --note "共用资产"
+python scripts/manage_assets.py split <project> --asset ASSET-0002 --name "受损状态" --scene P12-S003 --note "单独设计"
+python scripts/manage_assets.py decide <project> --asset ASSET-0007 --status excluded --note "无需制作"
+python scripts/manage_assets.py retract <project> --event ASREV-000001 --note "撤销"
+```
 
-每条待确认项在用户界面只显示问题编号、问题说明、按“线索 1、线索 2”排列的英文原文、相关英文上下文、中文参考译文和处理区。问题之间必须使用明显的 Markdown 分隔线。字段路径、精确范围、原文单元 ID 和当前值只保留在机器记录中，不向普通用户展示。中文只帮助理解，证据仍在内部绑定英文原文及 `source_unit_id`。
-
-验收清单直接读取片段的标准译文，不得为了验收再次调用模型翻译。用户可用自然语言或填写清单的方式选择“修改、补充、接受未知、暂不处理或撤销”；系统再将结果转换为验收事件。
-
-跨章身份问题同样只向用户显示 `IDN-NNNN` 编号、两个角色称谓以及中英双语线索。用户确认后，系统通过 `scripts/manage_character_identities.py` 追加归并事件，使旧角色 ID、章节概念键和全部名称索引指向统一角色。用户不直接编辑事件文件，也不需要返修已经通过的章节。
-
-人物资料在逐章阶段只记录本章实际出现的线索；缺失字段由全局档案统一显示为待确认，不在每章重复制造问题。全书复盘按“一个角色一个复盘包”展示其全部未决参数和已经累积的中英线索。用户确认后，系统通过 `scripts/manage_profile_decisions.py` 追加全局决定并重建档案；后续章节无论使用角色真名、头衔、关系称谓或旧编号，均通过统一角色索引读取同一份当前档案。
-
-若完整材料复盘后仍无法确认某些参数，使用 `scripts/run_pipeline.py ack-recap` 验收当前单角色包并保留未知。该记录只表示“已用完整材料复核”，不把未知伪装成已确认事实；角色包内容因新章节或资料决定发生变化时会自动重新进入队列。
-
-## 5. 当前安全边界
-
-当前字段修订覆盖场景摘要、明确场景名及归属、内外景、时间、现实层级、Beat 摘要与变化类型、文本类型和说话人身份。章节/场景结构的拆分与合并涉及稳定 ID 和多项下游依赖，必须使用后续专门的结构变更操作，不能伪装成普通字段修改。
-
-每条事件绑定基础分析 SHA-256。基础分析发生变化后，旧事件会被拒绝为过期，必须先复核再迁移，避免把旧结论静默套到新结构上。
+资产审核只决定范围，不产生审美设计。
